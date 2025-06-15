@@ -68,13 +68,51 @@ if invoice_file:
 
 if 'processed_data' in st.session_state:
     st.header("Invoice Summary")
+    st.write("You can edit the invoice summary details here if anything is missing or incorrect.")
     invoice_data = st.session_state.processed_data
     
-    col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Vendor Name", invoice_data.get("vendor_name", "N/A"))
-    col2.metric("Invoice Date", invoice_data.get("invoice_date", "N/A"))
-    col3.metric("Invoice Number", invoice_data.get("invoice_number", "N/A"))
-    col4.metric("Total Amount", f"{invoice_data.get('total_amount', 'N/A')} {invoice_data.get('currency', 'N/A')}")
+    col1, col2 = st.columns(2)
+
+    with col1:
+        vendor_name = st.text_input(
+            "Vendor Name",
+            value=invoice_data.get("vendor_name") or ""
+        )
+        invoice_date = st.text_input(
+            "Invoice Date",
+            value=invoice_data.get("invoice_date") or ""
+        )
+
+    with col2:
+        invoice_number = st.text_input(
+            "Invoice Number",
+            value=invoice_data.get("invoice_number") or ""
+        )
+        
+        sub_col1, sub_col2 = st.columns(2)
+        with sub_col1:
+            try:
+                current_total = float(invoice_data.get("total_amount", 0.0))
+            except (ValueError, TypeError):
+                current_total = 0.0
+            total_amount = st.number_input(
+                "Total Amount",
+                value=current_total,
+                step=0.01,
+                format="%.2f"
+            )
+        with sub_col2:
+            currency = st.text_input(
+                "Currency",
+                value=invoice_data.get("currency") or ""
+            )
+
+    # Update the session state with the potentially modified values
+    st.session_state.processed_data['vendor_name'] = vendor_name
+    st.session_state.processed_data['invoice_date'] = invoice_date
+    st.session_state.processed_data['invoice_number'] = invoice_number
+    st.session_state.processed_data['total_amount'] = total_amount
+    st.session_state.processed_data['currency'] = currency
 
     st.header("Review Required")
     st.write("The following items could not be matched with high confidence. Please select the correct product.")
