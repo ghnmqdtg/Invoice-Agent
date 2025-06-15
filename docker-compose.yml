@@ -1,0 +1,52 @@
+services:
+  n8n:
+    image: n8nio/n8n
+    container_name: n8n
+    restart: always
+    ports:
+      - "8080:5678"
+    environment:
+      - N8N_BASIC_AUTH_ACTIVE=true
+      - N8N_BASIC_AUTH_USER=admin
+      - N8N_BASIC_AUTH_PASSWORD=changeme
+      - WEBHOOK_URL=http://localhost:8080/
+      - GENERIC_TIMEZONE=Asia/Taipei
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - ./shared:/shared
+    networks:
+      - invoice-network
+
+  python-service:
+    image: python:3.11-slim
+    container_name: invoice-agent-python
+    restart: always
+    working_dir: /app
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./python-scripts:/app
+      - ./shared:/shared
+    environment:
+      - PYTHONPATH=/app
+      - FLASK_ENV=development
+    networks:
+      - invoice-network
+    command: >
+      bash -c "
+        python -m venv /app/venv/invoice-agent &&
+        source /app/venv/invoice-agent/bin/activate &&
+        pip install --upgrade pip &&
+        pip install -r requirements.txt &&
+        echo 'Virtual environment invoice-agent created successfully!' &&
+        echo 'Installed packages:' &&
+        pip list &&
+        python enhanced_service.py
+      "
+
+volumes:
+  n8n_data:
+
+networks:
+  invoice-network:
+    driver: bridge 
