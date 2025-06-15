@@ -18,7 +18,7 @@ services:
       - invoice-network
 
   python-service:
-    image: python:3.11-slim
+    image: continuumio/miniconda3:latest
     container_name: invoice-agent-python
     restart: always
     working_dir: /app
@@ -34,11 +34,11 @@ services:
       - invoice-network
     command: >
       bash -c "
-        python -m venv /app/venv/invoice-agent &&
-        source /app/venv/invoice-agent/bin/activate &&
-        pip install --upgrade pip &&
+        conda create -n invoice-agent python=3.11 -y &&
+        echo 'source activate invoice-agent' >> ~/.bashrc &&
+        source activate invoice-agent &&
         pip install -r requirements.txt &&
-        echo 'Virtual environment invoice-agent created successfully!' &&
+        echo 'Conda environment invoice-agent created successfully!' &&
         echo 'Installed packages:' &&
         pip list &&
         echo 'Running environment validation...' &&
