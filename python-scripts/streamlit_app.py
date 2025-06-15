@@ -33,15 +33,15 @@ product_db = load_product_db()
 if product_db:
     st.session_state.product_db = product_db
 
-# --- Sidebar for File Uploads ---
-st.sidebar.header("Upload Invoice")
-invoice_file = st.sidebar.file_uploader(
+# --- File Uploads ---
+st.header("Upload Invoice")
+invoice_file = st.file_uploader(
     "Upload your invoice", type=["pdf", "png", "jpg", "jpeg"]
 )
 
 if invoice_file:
-    st.sidebar.write(f"Uploaded file: `{invoice_file.name}`")
-    if st.sidebar.button("Process Invoice"):
+    st.write(f"Uploaded file: `{invoice_file.name}`")
+    if st.button("Process Invoice"):
         n8n_webhook_url = "http://localhost:8080/webhook-test/e77b5a73-f0ef-42ff-9519-8e5bbb7d7af4"
         
         files = {"file": (invoice_file.name, invoice_file.getvalue(), invoice_file.type)}
