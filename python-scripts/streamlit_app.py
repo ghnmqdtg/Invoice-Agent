@@ -114,12 +114,54 @@ if 'processed_data' in st.session_state:
     st.session_state.processed_data['total_amount'] = total_amount
     st.session_state.processed_data['currency'] = currency
 
+    st.header("Processed Items")
+    st.write("Below are all items extracted from the invoice. Items requiring your attention are highlighted.")
+
+    if 'items' in invoice_data and invoice_data['items']:
+        # Prepare data for the table
+        table_data = []
+        for item in invoice_data['items']:
+            item_copy = item.copy()
+            if item_copy.get('product_id') is None and 'possible_matches' in item_copy and item_copy['possible_matches']:
+                item_copy['status'] = 'Review Required'
+            elif item_copy.get('product_id'):
+                item_copy['status'] = 'Matched'
+            else:
+                item_copy['status'] = 'Not Matched'
+            table_data.append(item_copy)
+            
+        df = pd.DataFrame(table_data)
+
+        # Define columns to display, and filter for those that exist in the DataFrame
+        display_cols = [
+            'status', 'original_name', 'matched_name', 'quantity', 
+            'unit_price', 'total_price', 'match_score'
+        ]
+        existing_cols = [col for col in display_cols if col in df.columns]
+        
+        # Styler function to highlight rows
+        def highlight_review_rows(row):
+            color = '#FFF3CD' if row.get('status') == 'Review Required' else ''
+            return [f'background-color: {color}' for _ in row]
+
+        if existing_cols:
+            st.dataframe(
+                df[existing_cols].style.apply(highlight_review_rows, axis=1),
+                use_container_width=True,
+                hide_index=True
+            )
+        else:
+            st.info("Could not display items table as no relevant columns were found.")
+
+    else:
+        st.info("No items were extracted from the invoice.")
+
     st.header("Review Required")
     st.write("The following items could not be matched with high confidence. Please select the correct product.")
 
     items_to_review = [
         (i, item) for i, item in enumerate(st.session_state.processed_data['items'])
-        if item.get('product_id') is None and 'possible_matches' in item and item['possible_matches']
+        if item.get('product_id') is None or item.get('match_score') < 85
     ]
 
     if not items_to_review:
