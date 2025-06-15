@@ -75,8 +75,8 @@ def basic_match_product(item, product_map):
     if matched_product:
         enhanced_item['product_id'] = matched_product.get('product_id')
         enhanced_item['matched_name'] = matched_product.get('product_name')
-        enhanced_item['product_unit'] = matched_product.get('unit')
-        enhanced_item['product_currency'] = matched_product.get('currency')
+        enhanced_item['unit'] = matched_product.get('unit')
+        enhanced_item['currency'] = matched_product.get('currency')
     else:
         enhanced_item['product_id'] = None
         enhanced_item['matched_name'] = None

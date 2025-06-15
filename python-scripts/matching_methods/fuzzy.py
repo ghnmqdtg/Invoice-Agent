@@ -81,7 +81,8 @@ def fuzzy_match_product(item, product_db, threshold=85, suggestion_threshold=60)
         enhanced_item.update({
             'product_id': None,
             'matched_name': None,
-            'match_score': 0
+            'match_score': 0,
+            'possible_matches': [""]
         })
         return enhanced_item
 
@@ -95,16 +96,16 @@ def fuzzy_match_product(item, product_db, threshold=85, suggestion_threshold=60)
         enhanced_item.update({
             'product_id': best_match.get('product_id'),
             'matched_name': best_match.get('product_name'),
-            'product_unit': best_match.get('unit'),
-            'product_currency': best_match.get('currency'),
+            'unit': best_match.get('unit'),
+            'currency': best_match.get('currency'),
             'match_score': highest_score
         })
     else:
         suggestions = [{
             'product_id': p['product'].get('product_id'),
             'matched_name': p['product'].get('product_name'),
-            'product_unit': p['product'].get('unit'),
-            'product_currency': p['product'].get('currency'),
+            'unit': p['product'].get('unit'),
+            'currency': p['product'].get('currency'),
             'match_score': p['score']
         } for p in scored_products]
         

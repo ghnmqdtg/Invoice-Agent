@@ -134,8 +134,8 @@ if 'processed_data' in st.session_state:
 
         # Define columns to display, and filter for those that exist in the DataFrame
         display_cols = [
-            'status', 'original_name', 'matched_name', 'quantity', 
-            'unit_price', 'total_price', 'match_score'
+            'status', 'product_id', 'original_name', 'matched_name', 'quantity', 
+            'unit', 'unit_price', 'subtotal'
         ]
         existing_cols = [col for col in display_cols if col in df.columns]
         
@@ -174,38 +174,48 @@ if 'processed_data' in st.session_state:
         for index, item in items_to_review:
             st.subheader(f"Invoice Item: `{item.get('original_name')}`")
             
-            # Prepare options for selectbox
-            possible_matches = item['possible_matches']
-            options = ["--- NOT A MATCH ---"] + [
-                f"{p['matched_name']} (Score: {p['match_score']})" for p in possible_matches
-            ]
+            # --- Combined Product Selection ---
             
-            # Create a mapping from option string back to product data
-            option_map = {f"{p['matched_name']} (Score: {p['match_score']})": p for p in possible_matches}
+            # 1. Prepare suggestions from possible_matches
+            possible_matches = item.get('possible_matches', [])
+            suggestion_options = []
+            suggestion_map = {}
+            if possible_matches and isinstance(possible_matches[0], dict):
+                for p in possible_matches:
+                    option_str = f"{p['matched_name']} (Score: {p['match_score']})"
+                    suggestion_options.append(option_str)
+                    suggestion_map[option_str] = p
+            
+            # 2. Prepare all other products from DB
+            all_products = st.session_state.get('product_db', [])
+            product_db_map = {p['product_name']: p for p in all_products if p.get('product_name')}
+            
+            # 3. Filter out suggestions from all products to avoid duplicates
+            suggestion_names = {p['matched_name'] for p in possible_matches if isinstance(p, dict)}
+            other_product_names = [name for name in product_db_map.keys() if name not in suggestion_names]
+            
+            # 4. Combine options
+            options = suggestion_options + sorted(other_product_names)
 
+            # 5. The single selectbox
             selection = st.selectbox(
-                "Select the correct product:",
+                "Select the correct product or search from the list:",
                 options=options,
-                key=f"select_{index}" # Unique key for each selectbox
+                key=f"select_{index}",
+                placeholder="--- NOT A MATCH ---",
+                index=0 if options else None  # Set first option as default
             )
+            
+            # 6. Logic to handle selection
+            selected_product = None
+            if selection is None:
+                selected_product = None
+            elif selection in suggestion_map:
+                selected_product = suggestion_map[selection]
+            elif selection in product_db_map:
+                selected_product = product_db_map[selection]
 
-            # If user indicates no match, show a search box for the entire DB
-            if selection == "--- NOT A MATCH ---":
-                all_product_names = [""] + [p['product_name'] for p in st.session_state.product_db if p.get('product_name')]
-                manual_selection_name = st.selectbox(
-                    "Search for a product in the database",
-                    options=all_product_names,
-                    key=f"manual_select_{index}"
-                )
-                
-                # Find the full product details from the selected name
-                if manual_selection_name:
-                    selected_product = next((p for p in st.session_state.product_db if p['product_name'] == manual_selection_name), None)
-                    st.session_state.user_selections[index] = selected_product
-                else:
-                    st.session_state.user_selections[index] = None
-            else:
-                st.session_state.user_selections[index] = option_map.get(selection)
+            st.session_state.user_selections[index] = selected_product
 
         if st.button("Finalize and Generate JSON"):
             final_data = st.session_state.processed_data.copy()
@@ -215,9 +225,10 @@ if 'processed_data' in st.session_state:
                     # Update the item with the user's choice
                     final_data['items'][index].update({
                         'product_id': selection.get('product_id'),
-                        'matched_name': selection.get('product_name'),
-                        'product_unit': selection.get('unit'),
-                        'product_currency': selection.get('currency'),
+                        'matched_name': selection.get('matched_name'),
+                        'original_name': final_data['items'][index].get('original_name'),
+                        'unit': selection.get('unit'),
+                        'currency': selection.get('currency'),
                         'match_score': selection.get('match_score', 100),
                         'possible_matches': []
                     })
