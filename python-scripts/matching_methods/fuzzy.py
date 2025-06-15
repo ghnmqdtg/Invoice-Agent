@@ -2,7 +2,7 @@ import re
 from datetime import datetime
 from thefuzz import fuzz
 
-def fuzzy_matching(invoice_data, product_db, threshold=85):
+def fuzzy_matching(invoice_data, product_db, threshold=85, suggestion_threshold=60):
     """
     Enhanced invoice processing with fuzzy matching.
     """
@@ -11,7 +11,7 @@ def fuzzy_matching(invoice_data, product_db, threshold=85):
 
     enhanced_items = []
     for item in invoice_data['items']:
-        enhanced_item = fuzzy_match_product(item, product_db, threshold)
+        enhanced_item = fuzzy_match_product(item, product_db, threshold, suggestion_threshold)
         
         # Override subtotal
         if enhanced_item.get('quantity') and enhanced_item.get('unit_price'):
@@ -30,22 +30,24 @@ def normalize_text(text):
     """
     text = text.lower()
     text = text.replace('\\', '/')  # Convert backslashes to forward slashes
-    text = re.sub(r'[\(\)/,-]', ' ', text)  # Remove forward slashes and other special chars
+    text = re.sub(r'[\(\)/,-]', '', text)  # Remove forward slashes and other special chars
     text = re.sub(r'\s+', ' ', text).strip()
     return text
 
-def fuzzy_match_product(item, product_db, threshold=80):
+def fuzzy_match_product(item, product_db, threshold=85, suggestion_threshold=60):
     """
     Finds the best product match for an item using fuzzy string matching.
+    If no match is found above the threshold, it returns a list of possible matches.
     """
     input_name = item.get('product_name', '')
+    
+    # If no product name, return empty JSON
     if not input_name:
-        return {**item, 'product_id': None, 'matched_name': None, 'match_score': 0}
+        return {**item, 'product_id': None, 'matched_name': None, 'match_score': 0, 'possible_matches': []}
 
     normalized_input_name = normalize_text(input_name)
-    best_match = None
-    highest_score = 0
-
+    
+    scored_products = []
     for product in product_db:
         db_product_name = product.get('product_name', '')
         if not db_product_name:
@@ -56,15 +58,31 @@ def fuzzy_match_product(item, product_db, threshold=80):
         # Using token_set_ratio which is good for matching strings of different lengths
         score = fuzz.token_set_ratio(normalized_input_name, normalized_db_name)
 
-        if score > highest_score:
-            highest_score = score
-            best_match = product
+        if score >= suggestion_threshold:
+            scored_products.append({
+                'product': product,
+                'score': score
+            })
 
     enhanced_item = item.copy()
     if 'product_name' in enhanced_item:
         enhanced_item['original_name'] = enhanced_item.pop('product_name')
 
-    if highest_score >= threshold and best_match:
+    if not scored_products:
+        enhanced_item.update({
+            'product_id': None,
+            'matched_name': None,
+            'match_score': 0
+        })
+        return enhanced_item
+
+    scored_products.sort(key=lambda x: x['score'], reverse=True)
+    
+    best_match_info = scored_products[0]
+    highest_score = best_match_info['score']
+    best_match = best_match_info['product']
+
+    if highest_score >= threshold:
         enhanced_item.update({
             'product_id': best_match.get('product_id'),
             'matched_name': best_match.get('product_name'),
@@ -73,10 +91,19 @@ def fuzzy_match_product(item, product_db, threshold=80):
             'match_score': highest_score
         })
     else:
+        suggestions = [{
+            'product_id': p['product'].get('product_id'),
+            'matched_name': p['product'].get('product_name'),
+            'product_unit': p['product'].get('unit'),
+            'product_currency': p['product'].get('currency'),
+            'match_score': p['score']
+        } for p in scored_products]
+        
         enhanced_item.update({
             'product_id': None,
             'matched_name': None,
-            'match_score': highest_score
+            'match_score': highest_score,
+            'possible_matches': suggestions
         })
         
     return enhanced_item 
