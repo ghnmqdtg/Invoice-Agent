@@ -8,6 +8,7 @@ from datetime import datetime, timezone, timedelta
 import os
 from matching_methods.basic import basic_matching
 from matching_methods.fuzzy import fuzzy_matching
+import time
 
 app = Flask(__name__)
 app.config['JSON_SORT_KEYS'] = False
@@ -28,6 +29,7 @@ def health_check():
 @app.route('/process-invoice', methods=['POST'])
 def process_invoice():
     """Process invoice data sent from n8n with basic matching"""
+    start_time = time.time()
     try:
         data = request.get_json()
         
@@ -40,9 +42,13 @@ def process_invoice():
         else:
             processed_data = basic_matching(invoice_data, product_db)
         
+        end_time = time.time()
+        processing_time = end_time - start_time
+        
         return jsonify({
             "success": True,
             "timestamp": datetime.now().isoformat(),
+            "processing_time": processing_time,
             "processing_stats": get_processing_stats(processed_data),
             "processed_data": processed_data
         })
