@@ -6,12 +6,21 @@ def fuzzy_matching(invoice_data, product_db, threshold=85, suggestion_threshold=
     """
     Enhanced invoice processing with fuzzy matching.
     """
+    # Deduplicate product_db based on 'product_name'
+    unique_products = []
+    seen_product_names = set()
+    for product in product_db:
+        product_name = product.get('product_name')
+        if product_name and product_name not in seen_product_names:
+            unique_products.append(product)
+            seen_product_names.add(product_name)
+
     if 'items' not in invoice_data:
         return invoice_data
 
     enhanced_items = []
     for item in invoice_data['items']:
-        enhanced_item = fuzzy_match_product(item, product_db, threshold, suggestion_threshold)
+        enhanced_item = fuzzy_match_product(item, unique_products, threshold, suggestion_threshold)
         
         # Override subtotal
         if enhanced_item.get('quantity') and enhanced_item.get('unit_price'):
