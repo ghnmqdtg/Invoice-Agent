@@ -67,6 +67,15 @@ if invoice_file:
                     pass # response object may not exist
 
 if 'processed_data' in st.session_state:
+    st.header("Invoice Summary")
+    invoice_data = st.session_state.processed_data
+    
+    col1, col2, col3, col4 = st.columns(4)
+    col1.metric("Vendor Name", invoice_data.get("vendor_name", "N/A"))
+    col2.metric("Invoice Date", invoice_data.get("invoice_date", "N/A"))
+    col3.metric("Invoice Number", invoice_data.get("invoice_number", "N/A"))
+    col4.metric("Total Amount", f"{invoice_data.get('total_amount', 'N/A')} {invoice_data.get('currency', 'N/A')}")
+
     st.header("Review Required")
     st.write("The following items could not be matched with high confidence. Please select the correct product.")
 
