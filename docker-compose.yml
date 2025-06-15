@@ -8,7 +8,7 @@ services:
     environment:
       - N8N_BASIC_AUTH_ACTIVE=true
       - N8N_BASIC_AUTH_USER=admin
-      - N8N_BASIC_AUTH_PASSWORD=changeme
+      - N8N_BASIC_AUTH_PASSWORD=00000000
       - WEBHOOK_URL=http://localhost:8080/
       - GENERIC_TIMEZONE=Asia/Taipei
     volumes:
@@ -44,7 +44,7 @@ services:
         echo 'Running environment validation...' &&
         python env_check.py &&
         echo 'Environment validation passed! Starting main service...' &&
-        python enhanced_service.py
+        python product_matching.py
       "
 
 volumes:
