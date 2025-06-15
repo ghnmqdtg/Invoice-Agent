@@ -160,4 +160,11 @@ if 'final_data' in st.session_state:
         data=json.dumps(st.session_state.final_data, indent=2),
         file_name="final_invoice_data.json",
         mime="application/json"
-    ) 
+    )
+
+    if st.button("Upload a new one"):
+        # Clear the session state to allow for a new upload, preserving the product DB
+        for key in list(st.session_state.keys()):
+            if key != 'product_db':
+                del st.session_state[key]
+        st.rerun() 
