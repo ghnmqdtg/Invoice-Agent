@@ -6,7 +6,8 @@ Simple Invoice processing service with basic product matching
 from flask import Flask, request, jsonify
 from datetime import datetime, timezone, timedelta
 import os
-import re
+from matching_methods.basic import basic_matching
+from matching_methods.fuzzy import fuzzy_matching
 
 app = Flask(__name__)
 app.config['JSON_SORT_KEYS'] = False
@@ -21,7 +22,7 @@ def health_check():
         "status": "healthy",
         "timestamp": datetime.now(utc_plus_8).isoformat(),
         "service": "invoice-agent-python",
-        "features": ["basic_matching"]
+        "features": ["basic_matching", "fuzzy_matching"]
     })
 
 @app.route('/process-invoice', methods=['POST'])
@@ -32,8 +33,12 @@ def process_invoice():
         
         invoice_data = data.get('invoice_data', {})
         product_db = data.get('product_db', [])
+        match_method = data.get('match_method', 'basic') # Default to basic
         
-        processed_data = basic_matching(invoice_data, product_db)
+        if match_method == 'fuzzy':
+            processed_data = fuzzy_matching(invoice_data, product_db)
+        else:
+            processed_data = basic_matching(invoice_data, product_db)
         
         return jsonify({
             "success": True,
@@ -49,103 +54,32 @@ def process_invoice():
             "timestamp": datetime.now().isoformat()
         }), 500
 
-def basic_matching(invoice_data, product_db):
-    """Enhanced invoice processing with basic exact matching"""
-    if 'items' not in invoice_data:
-        return invoice_data
-    
-    enhanced_items = []
-    match_stats = {"exact_matches": 0, "no_matches": 0}
-    
-    for item in invoice_data['items']:
-        enhanced_item = basic_match_product(item, product_db)
-        
-        # Track matching statistics
-        if enhanced_item.get('product_id'):
-            match_stats["exact_matches"] += 1
-        else:
-            match_stats["no_matches"] += 1
-        
-        # Override subtotal
-        if enhanced_item.get('quantity') and enhanced_item.get('unit_price'):
-            enhanced_item['subtotal'] = enhanced_item['quantity'] * enhanced_item['unit_price']
-        
-        enhanced_items.append(enhanced_item)
-    
-    invoice_data['items'] = enhanced_items
-    invoice_data['match_statistics'] = match_stats
-    invoice_data['processed_at'] = datetime.now().isoformat()
-    
-    return invoice_data
-
-def normalize_separators(text):
-    """Convert all backslashes to forward slashes for consistent processing"""
-    return text.replace('\\', '/')
-
-def clean_product_name(name):
-    """Remove parentheses and extra whitespace from product name"""
-    return re.sub(r'\([^)]*\)', '', name.strip())
-
-def get_product_name_variants(product_name):
-    """Get all variants of a product name (individual parts and concatenated)"""
-    normalized = normalize_separators(product_name.lower())
-    parts = [clean_product_name(part) for part in normalized.split('/')]
-    concatenated = ''.join(parts)
-    return parts, concatenated
-
-def check_exact_match(input_name, product_name_parts):
-    """Check if input matches any individual product name part exactly"""
-    return input_name in product_name_parts
-
-def check_concatenated_match(input_name, concatenated):
-    """Check if input matches the concatenated product name"""
-    return input_name == concatenated
-
-def basic_match_product(item, product_db):
-    """Basic exact string matching with support for both / and \ separators"""
-    input_name = item.get('product_name', '').strip().lower()
-    enhanced_item = item.copy()
-    
-    # Rename product_name to original_name
-    if 'product_name' in enhanced_item:
-        enhanced_item['original_name'] = enhanced_item.pop('product_name')
-    
-    for product in product_db:
-        db_product_name = product.get('product_name', '').strip()
-        parts, concatenated = get_product_name_variants(db_product_name)
-        
-        # Check for exact match with any individual part
-        if check_exact_match(input_name, parts):
-            enhanced_item['product_id'] = product.get('product_id')
-            enhanced_item['matched_name'] = product.get('product_name')
-            enhanced_item['product_unit'] = product.get('unit')
-            enhanced_item['product_currency'] = product.get('currency')
-            break
-        
-        # Check for concatenated match
-        if check_concatenated_match(input_name, concatenated):
-            enhanced_item['product_id'] = product.get('product_id')
-            enhanced_item['matched_name'] = product.get('product_name')
-            enhanced_item['product_unit'] = product.get('unit')
-            enhanced_item['product_currency'] = product.get('currency')
-            break
-    else:
-        enhanced_item['product_id'] = None
-        enhanced_item['matched_name'] = None
-    
-    return enhanced_item
-
 def get_processing_stats(invoice_data):
     """Get processing statistics"""
     items = invoice_data.get('items', [])
-    return {
+    matched_items = len([item for item in items if item.get('product_id')])
+    unmatched_items = len(items) - matched_items
+    
+    stats = {
         'total_items': len(items),
-        'matched_items': len([item for item in items if item.get('product_id')]),
-        'unmatched_items': len([item for item in items if not item.get('product_id')]),
+        'matched_items': matched_items,
+        'unmatched_items': unmatched_items,
     }
 
+    # Add match score stats if available from fuzzy matching
+    if items and 'match_score' in items[0]:
+        scores = [item['match_score'] for item in items if 'match_score' in item]
+        if scores:
+            stats['average_match_score'] = sum(scores) / len(scores)
+            stats['min_match_score'] = min(scores)
+            stats['max_match_score'] = max(scores)
+
+    return stats
+
 if __name__ == '__main__':
-    os.makedirs('/shared', exist_ok=True)
+    # Adjust the path to be relative to the script's location
+    shared_dir = os.path.join(os.path.dirname(__file__), 'shared')
+    os.makedirs(shared_dir, exist_ok=True)
     
     print("🚀 Starting Simple Invoice Agent Python Service...")
     print("📊 Available endpoints:")

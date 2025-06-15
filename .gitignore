@@ -3,3 +3,4 @@ inputs/
 backup/
 shared/
 *DS_Store
+*.pyc
