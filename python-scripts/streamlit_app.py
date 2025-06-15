@@ -92,14 +92,14 @@ if 'processed_data' in st.session_state:
         sub_col1, sub_col2 = st.columns(2)
         with sub_col1:
             try:
-                current_total = float(invoice_data.get("total_amount", 0.0))
+                current_total = int(invoice_data.get("total_amount", 0))
             except (ValueError, TypeError):
-                current_total = 0.0
+                current_total = 0
             total_amount = st.number_input(
                 "Total Amount",
                 value=current_total,
-                step=0.01,
-                format="%.2f"
+                step=1,
+                format="%d"
             )
         with sub_col2:
             currency = st.text_input(
