@@ -6,8 +6,8 @@ Simple Invoice processing service with basic product matching
 from flask import Flask, request, jsonify
 from datetime import datetime, timezone, timedelta
 import os
-from matching_methods.basic import basic_matching
-from matching_methods.fuzzy import fuzzy_matching
+import pandas as pd
+from matching_methods import basic_matching, fuzzy_matching
 import time
 
 app = Flask(__name__)
@@ -31,10 +31,21 @@ def process_invoice():
     """Process invoice data sent from n8n with basic matching"""
     start_time = time.time()
     try:
+        # Load product database from a fixed path
+        try:
+            df = pd.read_csv("./shared/product_db.csv")
+            product_db = df.to_dict(orient='records')
+        except FileNotFoundError:
+            return jsonify({
+                "success": False,
+                "error": "Product database file not found on the server.",
+                "timestamp": datetime.now().isoformat()
+            }), 500
+
         data = request.get_json()
         
         invoice_data = data.get('invoice_data', {})
-        product_db = data.get('product_db', [])
+        # Product DB is now loaded from file, not the request
         match_method = data.get('match_method', 'basic') # Default to basic
         
         if match_method == 'fuzzy':
