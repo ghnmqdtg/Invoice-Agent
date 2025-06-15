@@ -3,6 +3,22 @@ from datetime import datetime
 
 def basic_matching(invoice_data, product_db):
     """Enhanced invoice processing with basic exact matching"""
+    # Pre-process product_db into a lookup map and handle duplicates
+    product_map = {}
+    seen_product_names = set()
+    for product in product_db:
+        product_name = product.get('product_name')
+        if not product_name or product_name in seen_product_names:
+            continue
+        seen_product_names.add(product_name)
+        
+        parts, concatenated = get_product_name_variants(product_name)
+        for part in parts:
+            if part not in product_map:
+                product_map[part] = product
+        if concatenated not in product_map:
+            product_map[concatenated] = product
+
     if 'items' not in invoice_data:
         return invoice_data
     
@@ -10,7 +26,7 @@ def basic_matching(invoice_data, product_db):
     match_stats = {"exact_matches": 0, "no_matches": 0}
     
     for item in invoice_data['items']:
-        enhanced_item = basic_match_product(item, product_db)
+        enhanced_item = basic_match_product(item, product_map)
         
         # Track matching statistics
         if enhanced_item.get('product_id'):
@@ -45,16 +61,8 @@ def get_product_name_variants(product_name):
     concatenated = ''.join(parts)
     return parts, concatenated
 
-def check_exact_match(input_name, product_name_parts):
-    """Check if input matches any individual product name part exactly"""
-    return input_name in product_name_parts
-
-def check_concatenated_match(input_name, concatenated):
-    """Check if input matches the concatenated product name"""
-    return input_name == concatenated
-
-def basic_match_product(item, product_db):
-    """Basic exact string matching with support for both / and \ separators"""
+def basic_match_product(item, product_map):
+    """Basic exact string matching using a pre-processed product map."""
     input_name = item.get('product_name', '').strip().lower()
     enhanced_item = item.copy()
     
@@ -62,25 +70,13 @@ def basic_match_product(item, product_db):
     if 'product_name' in enhanced_item:
         enhanced_item['original_name'] = enhanced_item.pop('product_name')
     
-    for product in product_db:
-        db_product_name = product.get('product_name', '').strip()
-        parts, concatenated = get_product_name_variants(db_product_name)
-        
-        # Check for exact match with any individual part
-        if check_exact_match(input_name, parts):
-            enhanced_item['product_id'] = product.get('product_id')
-            enhanced_item['matched_name'] = product.get('product_name')
-            enhanced_item['product_unit'] = product.get('unit')
-            enhanced_item['product_currency'] = product.get('currency')
-            break
-        
-        # Check for concatenated match
-        if check_concatenated_match(input_name, concatenated):
-            enhanced_item['product_id'] = product.get('product_id')
-            enhanced_item['matched_name'] = product.get('product_name')
-            enhanced_item['product_unit'] = product.get('unit')
-            enhanced_item['product_currency'] = product.get('currency')
-            break
+    matched_product = product_map.get(input_name)
+    
+    if matched_product:
+        enhanced_item['product_id'] = matched_product.get('product_id')
+        enhanced_item['matched_name'] = matched_product.get('product_name')
+        enhanced_item['product_unit'] = matched_product.get('unit')
+        enhanced_item['product_currency'] = matched_product.get('currency')
     else:
         enhanced_item['product_id'] = None
         enhanced_item['matched_name'] = None
