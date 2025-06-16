@@ -115,133 +115,129 @@ if 'processed_data' in st.session_state:
     st.session_state.processed_data['currency'] = currency
 
     st.header("Processed Items")
-    st.write("Below are all items extracted from the invoice. Items requiring your attention are highlighted.")
+    st.write("Below are all items extracted from the invoice. You can directly edit the matched product in the table. Items requiring your attention are highlighted.")
 
     if 'items' in invoice_data and invoice_data['items']:
-        # Prepare data for the table
-        table_data = []
-        for item in invoice_data['items']:
-            item_copy = item.copy()
-            if item_copy.get('product_id') is None and 'possible_matches' in item_copy and item_copy['possible_matches']:
-                item_copy['status'] = 'Review Required'
-            elif item_copy.get('product_id'):
-                item_copy['status'] = 'Matched'
-            else:
-                item_copy['status'] = 'Not Matched'
-            table_data.append(item_copy)
-            
-        df = pd.DataFrame(table_data)
+        # Prepare data for the table on first run
+        if 'edited_df' not in st.session_state:
+            table_data = []
+            for item in invoice_data['items']:
+                item_copy = item.copy()
+                if item_copy.get('product_id') is None:
+                    item_copy['status'] = 'Review Required'
+                else:
+                    item_copy['status'] = 'Matched'
+                table_data.append(item_copy)
+            df = pd.DataFrame(table_data)
+            # The 'possible_matches' column can contain mixed types (lists of dicts, empty lists)
+            # which Arrow cannot serialize. We can safely drop it as it's not used in the UI.
+            if 'possible_matches' in df.columns:
+                df = df.drop(columns=['possible_matches'])
+            st.session_state.edited_df = df
 
-        # Define columns to display, and filter for those that exist in the DataFrame
-        display_cols = [
-            'status', 'product_id', 'original_name', 'matched_name', 'quantity', 
-            'unit', 'unit_price', 'subtotal'
-        ]
-        existing_cols = [col for col in display_cols if col in df.columns]
-        
+        # --- In-place Table Editing ---
+
+        # 1. Prepare product list for dropdown
+        all_products = st.session_state.get('product_db', [])
+        product_names = [p['product_name'] for p in all_products if p.get('product_name')]
+        product_db_map = {p['product_name']: p for p in all_products}
+
         # Styler function to highlight rows
         def highlight_review_rows(row):
-            color = '#FFF3CD' if row.get('status') == 'Review Required' else ''
+            color = '#FFF3CD' if row.status == 'Review Required' else ''
             return [f'background-color: {color}' for _ in row]
+        
+        # Keep a copy of the dataframe before editing
+        df_before_edit = st.session_state.edited_df.copy()
 
-        if existing_cols:
-            st.dataframe(
-                df[existing_cols].style.apply(highlight_review_rows, axis=1),
-                use_container_width=True,
-                hide_index=True
-            )
-        else:
-            st.info("Could not display items table as no relevant columns were found.")
+        # Define columns to display and their order
+        display_cols = [
+            'status', 'product_id', 'original_name', 'matched_name', 'quantity',
+            'unit', 'unit_price', 'subtotal'
+        ]
+        
+        # Ensure all display columns exist in the dataframe before passing to column_order
+        existing_display_cols = [col for col in display_cols if col in st.session_state.edited_df.columns]
+
+        edited_df = st.data_editor(
+            st.session_state.edited_df.style.apply(highlight_review_rows, axis=1),
+            column_config={
+                "status": st.column_config.TextColumn("Status", disabled=True),
+                "product_id": st.column_config.TextColumn("Product ID", disabled=True),
+                "original_name": st.column_config.TextColumn("Original Name", disabled=True),
+                "matched_name": st.column_config.SelectboxColumn(
+                    "Matched Product",
+                    help="Select the correct product from the database.",
+                    options=sorted(product_names),
+                    required=False,
+                ),
+                "quantity": st.column_config.NumberColumn("Quantity", format="%d"),
+                "unit": st.column_config.TextColumn("Unit", disabled=True),
+                "unit_price": st.column_config.NumberColumn("Unit Price", format="%d", disabled=True),
+                "subtotal": st.column_config.NumberColumn("Subtotal", format="%d", disabled=True),
+                "match_score": None, # Hide match_score column
+            },
+            use_container_width=True,
+            hide_index=True,
+            column_order=existing_display_cols,
+            key="product_editor"
+        )
+        
+        # Detect changes and update dependent columns
+        if not edited_df.equals(df_before_edit):
+            for i in edited_df.index:
+                if edited_df.loc[i, 'matched_name'] != df_before_edit.loc[i, 'matched_name']:
+                    selected_product_name = edited_df.loc[i, 'matched_name']
+                    
+                    if pd.isna(selected_product_name) or selected_product_name is None:
+                        # Product was deselected, mark for review
+                        edited_df.loc[i, 'product_id'] = None
+                        edited_df.loc[i, 'status'] = 'Review Required'
+                    else:
+                        # Product was selected/changed, update details
+                        selected_product_details = product_db_map.get(selected_product_name, {})
+                        edited_df.loc[i, 'product_id'] = selected_product_details.get('product_id')
+                        edited_df.loc[i, 'unit'] = selected_product_details.get('unit')
+                        edited_df.loc[i, 'status'] = 'Matched'
+            
+            st.session_state.edited_df = edited_df
+            st.rerun()
 
     else:
         st.info("No items were extracted from the invoice.")
 
-    st.header("Review Required")
-    st.write("The following items could not be matched with high confidence. Please select the correct product.")
+    if st.button("Finalize and Generate JSON"):
+        final_data = st.session_state.processed_data.copy()
+        
+        # Use the edited dataframe from session state to create the final items list
+        final_items_df = st.session_state.edited_df.copy()
+        
+        # Update original items based on the final state of the editor
+        for i, original_item in enumerate(final_data['items']):
+            edited_row = final_items_df.iloc[i]
+            selected_name = edited_row.get('matched_name')
 
-    items_to_review = [
-        (i, item) for i, item in enumerate(st.session_state.processed_data['items'])
-        if item.get('product_id') is None or item.get('match_score') < 85
-    ]
-
-    if not items_to_review:
-        st.info("No items require manual review.")
-    else:
-        # Initialize a place to store user's choices
-        if 'user_selections' not in st.session_state:
-            st.session_state.user_selections = {}
-
-        for index, item in items_to_review:
-            st.subheader(f"Invoice Item: `{item.get('original_name')}`")
-            
-            # --- Combined Product Selection ---
-            
-            # 1. Prepare suggestions from possible_matches
-            possible_matches = item.get('possible_matches', [])
-            suggestion_options = []
-            suggestion_map = {}
-            if possible_matches and isinstance(possible_matches[0], dict):
-                for p in possible_matches:
-                    option_str = f"{p['matched_name']} (Score: {p['match_score']})"
-                    suggestion_options.append(option_str)
-                    suggestion_map[option_str] = p
-            
-            # 2. Prepare all other products from DB
-            all_products = st.session_state.get('product_db', [])
-            product_db_map = {p['product_name']: p for p in all_products if p.get('product_name')}
-            
-            # 3. Filter out suggestions from all products to avoid duplicates
-            suggestion_names = {p['matched_name'] for p in possible_matches if isinstance(p, dict)}
-            other_product_names = [name for name in product_db_map.keys() if name not in suggestion_names]
-            
-            # 4. Combine options
-            options = suggestion_options + sorted(other_product_names)
-
-            # 5. The single selectbox
-            selection = st.selectbox(
-                "Select the correct product or search from the list:",
-                options=options,
-                key=f"select_{index}",
-                placeholder="--- NOT A MATCH ---",
-                index=0 if options else None  # Set first option as default
-            )
-            
-            # 6. Logic to handle selection
-            selected_product = None
-            if selection is None:
-                selected_product = None
-            elif selection in suggestion_map:
-                selected_product = suggestion_map[selection]
-            elif selection in product_db_map:
-                selected_product = product_db_map[selection]
-
-            st.session_state.user_selections[index] = selected_product
-
-        if st.button("Finalize and Generate JSON"):
-            final_data = st.session_state.processed_data.copy()
-            
-            for index, selection in st.session_state.user_selections.items():
-                if selection:
-                    # Update the item with the user's choice
-                    final_data['items'][index].update({
-                        'product_id': selection.get('product_id'),
-                        'matched_name': selection.get('matched_name'),
-                        'original_name': final_data['items'][index].get('original_name'),
-                        'unit': selection.get('unit'),
-                        'currency': selection.get('currency'),
-                        'match_score': selection.get('match_score', 100),
-                        'possible_matches': []
-                    })
-                else:
-                    # Handle cases where "NOT A MATCH" was selected and no manual product was chosen
-                    final_data['items'][index].update({
-                        'product_id': None,
-                        'matched_name': None,
-                        'match_score': 0,
-                        'possible_matches': []
-                    })
-
-            st.session_state.final_data = final_data
+            if selected_name and not pd.isna(selected_name):
+                selection = product_db_map[selected_name]
+                original_item.update({
+                    'product_id': selection.get('product_id'),
+                    'matched_name': selection.get('product_name'), # Use canonical name
+                    'unit': selection.get('unit'),
+                    'currency': selection.get('currency'),
+                    'match_score': 100, # Manual match is 100% confidence
+                    'possible_matches': []
+                })
+            else:
+                # Not matched or cleared by user
+                original_item.update({
+                    'product_id': None,
+                    'matched_name': None,
+                    'match_score': 0,
+                    'possible_matches': []
+                })
+        
+        st.session_state.final_data = final_data
+        st.rerun()
 
 if 'final_data' in st.session_state:
     st.header("Completed JSON")
