@@ -23,16 +23,9 @@ def basic_matching(invoice_data, product_db):
         return invoice_data
     
     enhanced_items = []
-    match_stats = {"exact_matches": 0, "no_matches": 0}
     
     for item in invoice_data['items']:
         enhanced_item = basic_match_product(item, product_map)
-        
-        # Track matching statistics
-        if enhanced_item.get('product_id'):
-            match_stats["exact_matches"] += 1
-        else:
-            match_stats["no_matches"] += 1
         
         # Override subtotal
         if enhanced_item.get('quantity') and enhanced_item.get('unit_price'):
@@ -41,7 +34,6 @@ def basic_matching(invoice_data, product_db):
         enhanced_items.append(enhanced_item)
     
     invoice_data['items'] = enhanced_items
-    invoice_data['match_statistics'] = match_stats
     
     return invoice_data
 
