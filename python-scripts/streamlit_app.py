@@ -244,16 +244,20 @@ if 'processed_data' in st.session_state:
         st.info("No items were extracted from the invoice.")
 
     if st.button("Finalize and Generate JSON"):
+        # Copy the processed data
         final_data = st.session_state.processed_data.copy()
-        
         # Use the final state of the dataframe from session state
         final_items_df = st.session_state.edited_df.copy()
-        
         # Convert dataframe to a list of dicts for the final JSON
         final_items = final_items_df.to_dict(orient='records')
-
         # Clean up NaN values for JSON serialization and add other final details
         cleaned_final_items = []
+        # Remove the key "items" from the final data
+        final_data.pop('items', None)
+        # Move the key "items" to the bottom of the final data (for better readability)
+        final_data['items'] = final_items
+        # Clean up the final items
+        # For each item in the final items
         for item in final_items:
             # Skip empty rows that might have been added but not filled
             if pd.isna(item.get('original_name')) and pd.isna(item.get('matched_name')):
@@ -279,9 +283,9 @@ if 'processed_data' in st.session_state:
         final_data['items'] = cleaned_final_items
         
         # Recalculate the grand total based on the final list of items
-        final_data['total_amount'] = sum(
+        final_data['total_amount'] = final_data.get('total_amount', sum(
             item.get('subtotal', 0) or 0 for item in cleaned_final_items
-        )
+        ))
         
         st.session_state.final_data = final_data
         st.rerun()
