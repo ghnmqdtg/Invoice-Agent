@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Prompt Converter</title>
+        <script src="https://cdn.tailwindcss.com"></script>
+        <style>
+            body {
+                font-family: "Inter", sans-serif;
+            }
+        </style>
+    </head>
+
+    <body class="bg-gray-100 text-gray-800 p-4 sm:p-8">
+        <div class="max-w-4xl mx-auto bg-white p-6 rounded-xl shadow-lg">
+            <h1 class="text-2xl font-bold mb-2">Prompt to Single-Line Converter</h1>
+            <p class="text-gray-600 mb-6">
+                Edit the prompt below, then click the button to get a single-line string
+                ready for the Gemini API. The result will be copied to your clipboard
+                automatically.
+            </p>
+
+            <!-- Prompt Input -->
+            <div class="mb-4">
+                <label for="promptInput" class="block text-sm font-medium text-gray-700 mb-2">Your Prompt:</label>
+                <textarea id="promptInput" rows="20"
+                    class="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition duration-150 ease-in-out">
+You are an intelligent invoice parser. Analyze the provided invoice document.
+
+Your job is to:
+
+1.  Extract key information from the invoice, such as:
+    * invoice_number
+    * invoice_date
+    * due_date (if available)
+    * vendor_name
+    * shipping_address
+    * total_amount
+    * currency (e.g., USD, IDR, etc.)
+    * payment_method (e.g., cash, credit card, etc.)
+    * list of items (use the key in English)
+        * product_id (品號)
+        * product_name (品名)
+        * quantity (數量)
+        * unit (單位)
+        * unit_price (單價)
+        * subtotal (小計)
+    * tax (if available)
+
+2.  Some of the invoices might be handwritten. Here are some hints for you:
+	1. If the text is in Chinese, please respond in Traditional Chinese.
+	2. If you find crossed-out items, please ignore them.
+	3. Items are typically written in a format like "{product name} {quantity} {unit}", and there is no price.
+	4. Some of the invoices are long, and items would be in columns.
+	5. Auto-correct the crabbed writing text. For example, units like "兩"(tael) might look like "雨" (rain); we correct it to "兩".
+	6. Some people like to write product names with spaces, for example, a product like "蒜泥" would be written like "蒜    泥". Please do not mistake it as two products, "蒜" and "泥".
+
+3.  Return the result in this exact JSON format:
+
+```json
+{
+  "invoice_number": "",
+  "invoice_date": "YYYY-MM-DD",
+  "due_date": "YYYY-MM-DD",
+  "vendor_name": "",
+  "shipping_address": "",
+  "payment_method": "",
+  "total_amount": 0.0,
+  "currency": "",
+  "tax": 0.0,
+  "items": [
+    {
+      "product_id": "",
+      "product_name": "",
+      "quantity": 0,
+      "unit": "",
+      "unit_price": 0.0,
+      "subtotal": 0.0
+    }
+  ]
+}
+```
+</textarea>
+            </div>
+
+            <!-- Action Button -->
+            <button id="convertBtn"
+                class="w-full bg-blue-600 text-white font-bold py-3 px-4 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors duration-200">
+                Convert and Copy to Clipboard
+            </button>
+
+            <!-- Result Display -->
+            <div class="mt-6">
+                <label for="resultOutput" class="block text-sm font-medium text-gray-700 mb-2">Result:</label>
+                <textarea id="resultOutput" rows="5" class="w-full p-3 bg-gray-50 border border-gray-300 rounded-md"
+                    readonly></textarea>
+            </div>
+            <div id="copy-message"
+                class="mt-2 text-sm text-green-600 font-medium opacity-0 transition-opacity duration-300">
+                Copied to clipboard!
+            </div>
+        </div>
+
+        <script>
+            const convertBtn = document.getElementById("convertBtn");
+            const promptInput = document.getElementById("promptInput");
+            const resultOutput = document.getElementById("resultOutput");
+            const copyMessage = document.getElementById("copy-message");
+
+            convertBtn.addEventListener("click", () => {
+                // Get the text from the textarea
+                const multiLinePrompt = promptInput.value;
+
+                // The best way to create a valid JSON string is to stringify it.
+                // This handles newlines, quotes, and other special characters correctly.
+                // .slice(1, -1) removes the outer quotes that JSON.stringify adds.
+                const singleLineString = JSON.stringify(multiLinePrompt).slice(1, -1);
+
+                // Display the result
+                resultOutput.value = singleLineString;
+
+                // Copy to clipboard
+                // Use the document.execCommand for wider compatibility in iFrames
+                resultOutput.select();
+                document.execCommand("copy");
+
+                // Show feedback message
+                copyMessage.classList.remove("opacity-0");
+                setTimeout(() => {
+                    copyMessage.classList.add("opacity-0");
+                }, 2000);
+            });
+        </script>
+    </body>
+
+</html>

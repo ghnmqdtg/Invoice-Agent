@@ -1,3 +1,7 @@
+# A script to convert the `product_dataset.xlsx` to `shared/product_db.csv`
+# Please run this script in the root directory of the project
+# with command: python ./utils/excel_converter.py
+
 import pandas as pd
 
 # Convert `product_dataset.xlsx` to `shared/product_db.csv`
