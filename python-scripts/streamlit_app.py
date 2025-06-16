@@ -334,7 +334,7 @@ if 'final_data' in st.session_state:
     st.session_state.final_data['file_name'] = file_name
     # Remove `processed_at` in the final data
     st.session_state.final_data.pop('processed_at', None)
-    col1, col2 = st.columns(2)
+    col1, col2, col3 = st.columns(3)
     with col1:
         st.download_button(
             label="Download Final JSON",
@@ -368,10 +368,10 @@ if 'final_data' in st.session_state:
                         st.error(f"Response content: {response.text}")
                     except NameError:
                         pass # response object may not exist
-
-    if st.button("Upload the next file"):
-        # Clear the session state to allow for a new upload, preserving the product DB
-        for key in list(st.session_state.keys()):
-            if key != 'product_db':
-                del st.session_state[key]
-        st.rerun() 
+    with col3:
+        if st.button("Upload the next file"):
+            # Clear the session state to allow for a new upload, preserving the product DB
+            for key in list(st.session_state.keys()):
+                if key != 'product_db':
+                    del st.session_state[key]
+            st.rerun() 
