@@ -97,20 +97,38 @@ if 'processed_data' in st.session_state:
                 st.warning(f"Could not automatically parse date: '{date_str}'. Please select it manually.")
                 current_date_val = None
 
+        # Invoice Date
         invoice_date = st.date_input(
             "Invoice Date",
             value=current_date_val,
             format="YYYY-MM-DD"
         )
 
+        # Payment Method
+        payment_method_options = ["Cash", "Bank Transfer", "Credit Card", "Other"]
+        payment_method = st.selectbox(
+            "Payment Method",
+            options=payment_method_options,
+            index=0 if not invoice_data.get("payment_method") else payment_method_options.index(invoice_data.get("payment_method")),
+            help="The method of payment used for the invoice"
+        )
+
     with col2:
+        # Shipping Address
+        shipping_address = st.text_input(
+            "Shipping Address",
+            value=invoice_data.get("shipping_address") or "",
+            help="The shipping address of the invoice"
+        )
+
         invoice_number = st.text_input(
             "Invoice Number",
             value=invoice_data.get("invoice_number") or ""
         )
         
-        sub_col1, sub_col2 = st.columns(2)
+        sub_col1, sub_col2, sub_col3 = st.columns(3)
         with sub_col1:
+            # Total Amount
             try:
                 current_total = int(invoice_data.get("total_amount", 0))
             except (ValueError, TypeError):
@@ -119,9 +137,24 @@ if 'processed_data' in st.session_state:
                 "Total Amount",
                 value=current_total,
                 step=1,
-                format="%d"
+                format="%d",
+                min_value=0
             )
         with sub_col2:
+            # Tax Amount
+            try:
+                current_tax = int(invoice_data.get("tax", 0))
+            except (ValueError, TypeError):
+                current_tax = 0
+            tax_amount = st.number_input(
+                "Tax Amount",
+                value=current_tax,
+                step=1,
+                format="%d",
+                min_value=0
+            )
+        with sub_col3:
+            # Currency
             currency = st.text_input(
                 "Currency",
                 value=invoice_data.get("currency") or ""
@@ -129,9 +162,12 @@ if 'processed_data' in st.session_state:
 
     # Update the session state with the potentially modified values
     st.session_state.processed_data['vendor_name'] = vendor_name
+    st.session_state.processed_data['shipping_address'] = shipping_address
     st.session_state.processed_data['invoice_date'] = invoice_date.strftime('%Y-%m-%d') if invoice_date else None
     st.session_state.processed_data['invoice_number'] = invoice_number
     st.session_state.processed_data['total_amount'] = total_amount
+    st.session_state.processed_data['tax'] = tax_amount
+    st.session_state.processed_data['payment_method'] = payment_method
     st.session_state.processed_data['currency'] = currency
 
     st.header("Processed Items")
