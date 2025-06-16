@@ -4,3 +4,4 @@ backup/
 shared/
 *DS_Store
 *.pyc
+config.json

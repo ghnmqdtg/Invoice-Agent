@@ -9,6 +9,29 @@ st.set_page_config(layout="wide")
 
 st.title("Invoice Product Matching Assistant")
 
+# --- Load Configuration ---
+@st.cache_data
+def load_config():
+    script_dir = os.path.dirname(__file__)
+    config_path = os.path.join(script_dir, "config.json")
+    example_path = os.path.join(script_dir, "config.json.example")
+    
+    try:
+        with open(config_path, 'r') as f:
+            return json.load(f)
+    except FileNotFoundError:
+        st.error(f"Configuration file not found at `{config_path}`.")
+        st.info(f"Please create it by copying the example file: `cp {example_path} {config_path}`")
+        return None
+    except json.JSONDecodeError:
+        st.error(f"Error decoding JSON from `{config_path}`. Please check its format.")
+        return None
+
+config = load_config()
+
+if not config:
+    st.stop()
+
 st.info("""
 **Workflow:**
 1. Upload your invoice file (PDF, PNG, or JPG).
@@ -50,7 +73,10 @@ if invoice_file:
         # Clear the last processed data
         st.session_state.processed_data = None
 
-        n8n_webhook_url = "http://localhost:8080/webhook-test/e77b5a73-f0ef-42ff-9519-8e5bbb7d7af4"
+        n8n_webhook_url = config.get("N8N_PROCESS_INVOICE_WEBHOOK")
+        if not n8n_webhook_url:
+            st.error("N8N_PROCESS_INVOICE_WEBHOOK not found in config.json.")
+            st.stop()
         
         files = {"file": (invoice_file.name, invoice_file.getvalue(), invoice_file.type)}
         with st.spinner("Processing invoice via n8n... This may take a moment."):
@@ -345,7 +371,10 @@ if 'final_data' in st.session_state:
         )
     with col2:
         if st.button("Upload to database"):
-            n8n_gdrive_webhook_url = "http://localhost:8080/webhook-test/9e7c8a70-275e-49d7-9bae-a478660d5aef"
+            n8n_gdrive_webhook_url = config.get("N8N_GDRIVE_UPLOAD_WEBHOOK")
+            if not n8n_gdrive_webhook_url:
+                st.error("N8N_GDRIVE_UPLOAD_WEBHOOK not found in config.json.")
+                st.stop()
             
             with st.spinner("Uploading to database via n8n..."):
                 try:
