@@ -26,7 +26,6 @@ def alias_match_item(item, alias_map, product_id_map):
             'product_id': matched_product.get('product_id'),
             'matched_name': matched_product.get('product_name'),
             'unit': matched_product.get('unit'),
-            'currency': matched_product.get('currency'),
             'match_score': 100
         })
         return enhanced_item

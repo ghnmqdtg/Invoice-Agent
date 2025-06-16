@@ -96,7 +96,6 @@ def fuzzy_match_product(item, product_db, threshold=85, suggestion_threshold=60)
             'product_id': best_match.get('product_id'),
             'matched_name': best_match.get('product_name'),
             'unit': best_match.get('unit'),
-            'currency': best_match.get('currency'),
             'match_score': highest_score
         })
     else:
@@ -104,7 +103,6 @@ def fuzzy_match_product(item, product_db, threshold=85, suggestion_threshold=60)
             'product_id': p['product'].get('product_id'),
             'matched_name': p['product'].get('product_name'),
             'unit': p['product'].get('unit'),
-            'currency': p['product'].get('currency'),
             'match_score': p['score']
         } for p in scored_products]
         

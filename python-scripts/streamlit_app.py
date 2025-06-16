@@ -261,7 +261,6 @@ if 'processed_data' in st.session_state:
 
             if cleaned_item.get('matched_name'):
                 selection = product_db_map.get(cleaned_item['matched_name'], {})
-                cleaned_item['currency'] = selection.get('currency')
                 cleaned_item['match_score'] = 100
             else:
                 cleaned_item['match_score'] = 0
