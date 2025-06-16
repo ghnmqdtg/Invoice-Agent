@@ -78,9 +78,22 @@ if 'processed_data' in st.session_state:
             "Vendor Name",
             value=invoice_data.get("vendor_name") or ""
         )
-        invoice_date = st.text_input(
+        
+        # --- Date Picker for Invoice Date ---
+        current_date_val = None
+        date_str = invoice_data.get("invoice_date")
+        if date_str:
+            try:
+                # Use pandas to parse various date formats robustly
+                current_date_val = pd.to_datetime(date_str).date()
+            except (ValueError, TypeError):
+                st.warning(f"Could not automatically parse date: '{date_str}'. Please select it manually.")
+                current_date_val = None
+
+        invoice_date = st.date_input(
             "Invoice Date",
-            value=invoice_data.get("invoice_date") or ""
+            value=current_date_val,
+            format="YYYY-MM-DD"
         )
 
     with col2:
@@ -109,7 +122,7 @@ if 'processed_data' in st.session_state:
 
     # Update the session state with the potentially modified values
     st.session_state.processed_data['vendor_name'] = vendor_name
-    st.session_state.processed_data['invoice_date'] = invoice_date
+    st.session_state.processed_data['invoice_date'] = invoice_date.strftime('%Y-%m-%d') if invoice_date else None
     st.session_state.processed_data['invoice_number'] = invoice_number
     st.session_state.processed_data['total_amount'] = total_amount
     st.session_state.processed_data['currency'] = currency
