@@ -42,7 +42,6 @@ def basic_matching(invoice_data, product_db):
     
     invoice_data['items'] = enhanced_items
     invoice_data['match_statistics'] = match_stats
-    invoice_data['processed_at'] = datetime.now().isoformat()
     
     return invoice_data
 

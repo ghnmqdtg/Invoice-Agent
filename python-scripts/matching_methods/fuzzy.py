@@ -29,7 +29,6 @@ def fuzzy_matching(invoice_data, product_db, threshold=85, suggestion_threshold=
         enhanced_items.append(enhanced_item)
 
     invoice_data['items'] = enhanced_items
-    invoice_data['processed_at'] = datetime.now().isoformat()
     
     return invoice_data
 
