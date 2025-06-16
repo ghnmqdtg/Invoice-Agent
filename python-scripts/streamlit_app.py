@@ -178,28 +178,45 @@ if 'processed_data' in st.session_state:
                 "match_score": None, # Hide match_score column
             },
             use_container_width=True,
-            hide_index=True,
+            hide_index=False,
             column_order=existing_display_cols,
+            num_rows="dynamic", # Allow adding/deleting rows
             key="product_editor"
         )
         
         # Detect changes and update dependent columns
         if not edited_df.equals(df_before_edit):
+            # On any change, re-process the entire dataframe to update derived values
             for i in edited_df.index:
-                if edited_df.loc[i, 'matched_name'] != df_before_edit.loc[i, 'matched_name']:
-                    selected_product_name = edited_df.loc[i, 'matched_name']
-                    
-                    if pd.isna(selected_product_name) or selected_product_name is None:
-                        # Product was deselected, mark for review
-                        edited_df.loc[i, 'product_id'] = None
-                        edited_df.loc[i, 'status'] = 'Review Required'
-                    else:
-                        # Product was selected/changed, update details
-                        selected_product_details = product_db_map.get(selected_product_name, {})
-                        edited_df.loc[i, 'product_id'] = selected_product_details.get('product_id')
-                        edited_df.loc[i, 'unit'] = selected_product_details.get('unit')
-                        edited_df.loc[i, 'status'] = 'Matched'
-            
+                selected_product_name = edited_df.loc[i, 'matched_name']
+                
+                if pd.isna(selected_product_name) or selected_product_name is None:
+                    # Product deselected or it's a new empty row
+                    edited_df.loc[i, 'product_id'] = None
+                    edited_df.loc[i, 'status'] = 'Review Required'
+                    # For new rows, some fields will be NaN. Let's not set them to 0 yet.
+                    is_new_row = i not in df_before_edit.index
+                    if is_new_row:
+                        edited_df.loc[i, 'unit'] = None
+                        edited_df.loc[i, 'unit_price'] = 0.0
+                else:
+                    # A product is selected, so update its details from the DB
+                    selected_product_details = product_db_map.get(selected_product_name, {})
+                    edited_df.loc[i, 'product_id'] = selected_product_details.get('product_id')
+                    edited_df.loc[i, 'unit'] = selected_product_details.get('unit')
+                    # Assume product_db might have unit_price
+                    unit_price = selected_product_details.get('unit_price', 0.0)
+                    edited_df.loc[i, 'unit_price'] = unit_price
+                    edited_df.loc[i, 'status'] = 'Matched'
+
+                # Always recalculate subtotal
+                quantity = edited_df.loc[i, 'quantity']
+                unit_price = edited_df.loc[i, 'unit_price']
+                if pd.notna(quantity) and pd.notna(unit_price):
+                    edited_df.loc[i, 'subtotal'] = float(quantity) * float(unit_price)
+                else:
+                    edited_df.loc[i, 'subtotal'] = 0.0
+
             st.session_state.edited_df = edited_df
             st.rerun()
 
@@ -209,32 +226,43 @@ if 'processed_data' in st.session_state:
     if st.button("Finalize and Generate JSON"):
         final_data = st.session_state.processed_data.copy()
         
-        # Use the edited dataframe from session state to create the final items list
+        # Use the final state of the dataframe from session state
         final_items_df = st.session_state.edited_df.copy()
         
-        # Update original items based on the final state of the editor
-        for i, original_item in enumerate(final_data['items']):
-            edited_row = final_items_df.iloc[i]
-            selected_name = edited_row.get('matched_name')
+        # Convert dataframe to a list of dicts for the final JSON
+        final_items = final_items_df.to_dict(orient='records')
 
-            if selected_name and not pd.isna(selected_name):
-                selection = product_db_map[selected_name]
-                original_item.update({
-                    'product_id': selection.get('product_id'),
-                    'matched_name': selection.get('product_name'), # Use canonical name
-                    'unit': selection.get('unit'),
-                    'currency': selection.get('currency'),
-                    'match_score': 100, # Manual match is 100% confidence
-                    'possible_matches': []
-                })
+        # Clean up NaN values for JSON serialization and add other final details
+        cleaned_final_items = []
+        for item in final_items:
+            # Skip empty rows that might have been added but not filled
+            if pd.isna(item.get('original_name')) and pd.isna(item.get('matched_name')):
+                continue
+
+            cleaned_item = {}
+            for key, value in item.items():
+                # Replace pandas NaN with None for valid JSON
+                cleaned_item[key] = None if pd.isna(value) else value
+            
+            # Ensure required fields exist even for new rows
+            cleaned_item.setdefault('original_name', cleaned_item.get('matched_name'))
+
+            if cleaned_item.get('matched_name'):
+                selection = product_db_map.get(cleaned_item['matched_name'], {})
+                cleaned_item['currency'] = selection.get('currency')
+                cleaned_item['match_score'] = 100
             else:
-                # Not matched or cleared by user
-                original_item.update({
-                    'product_id': None,
-                    'matched_name': None,
-                    'match_score': 0,
-                    'possible_matches': []
-                })
+                cleaned_item['match_score'] = 0
+            
+            cleaned_item.pop('status', None) # Remove temporary UI field
+            cleaned_final_items.append(cleaned_item)
+
+        final_data['items'] = cleaned_final_items
+        
+        # Recalculate the grand total based on the final list of items
+        final_data['total_amount'] = sum(
+            item.get('subtotal', 0.0) or 0.0 for item in cleaned_final_items
+        )
         
         st.session_state.final_data = final_data
         st.rerun()
