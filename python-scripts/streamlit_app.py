@@ -3,7 +3,7 @@ import pandas as pd
 import json
 import requests
 import os
-from matching_methods import basic_matching, fuzzy_matching
+from datetime import datetime
 
 st.set_page_config(layout="wide")
 
@@ -48,7 +48,6 @@ if invoice_file:
         with st.spinner("Processing invoice via n8n... This may take a moment."):
             try:
                 response = requests.post(n8n_webhook_url, files=files, timeout=300)
-                print(response.text) # For debugging
                 response.raise_for_status()
                 
                 processed_json = response.json()
@@ -283,14 +282,47 @@ if 'processed_data' in st.session_state:
 if 'final_data' in st.session_state:
     st.header("Completed JSON")
     st.json(st.session_state.final_data)
-    st.download_button(
-        label="Download Final JSON",
-        data=json.dumps(st.session_state.final_data, indent=2),
-        file_name="final_invoice_data.json",
-        mime="application/json"
-    )
+    file_name = f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_invoice_{st.session_state.final_data['invoice_number']}.json"
+    # Add file_name to the final data
+    st.session_state.final_data['file_name'] = file_name
+    # Remove `processed_at` in the final data
+    st.session_state.final_data.pop('processed_at', None)
+    col1, col2 = st.columns(2)
+    with col1:
+        st.download_button(
+            label="Download Final JSON",
+            data=json.dumps(st.session_state.final_data, indent=2),
+            # Use datetime as the file name
+            file_name=file_name,
+            mime="application/json"
+        )
+    with col2:
+        if st.button("Upload to database"):
+            n8n_gdrive_webhook_url = "http://localhost:8080/webhook-test/9e7c8a70-275e-49d7-9bae-a478660d5aef"
+            
+            with st.spinner("Uploading to database via n8n..."):
+                try:
+                    headers = {'Content-Type': 'application/json'}
+                    response = requests.post(
+                        n8n_gdrive_webhook_url,
+                        data=json.dumps(st.session_state.final_data),
+                        headers=headers,
+                        timeout=60
+                    )
+                    response.raise_for_status()
+                    # If the response is 200, then the file is uploaded to the database
+                    if response.status_code == 200:
+                        st.success("Successfully uploaded to the database!")
+                    else:
+                        st.error(f"Failed to upload to database: {response.text}")
+                except requests.exceptions.RequestException as e:
+                    st.error(f"Failed to upload to database: {e}")
+                    try:
+                        st.error(f"Response content: {response.text}")
+                    except NameError:
+                        pass # response object may not exist
 
-    if st.button("Upload a new one"):
+    if st.button("Upload the next file"):
         # Clear the session state to allow for a new upload, preserving the product DB
         for key in list(st.session_state.keys()):
             if key != 'product_db':
