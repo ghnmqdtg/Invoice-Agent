@@ -42,6 +42,14 @@ invoice_file = st.file_uploader(
 if invoice_file:
     st.write(f"Uploaded file: `{invoice_file.name}`")
     if st.button("Process Invoice"):
+        # Clear the last session state
+        for key in list(st.session_state.keys()):
+            # Except for the product database
+            if key != 'product_db':
+                del st.session_state[key]
+        # Clear the last processed data
+        st.session_state.processed_data = None
+
         n8n_webhook_url = "http://localhost:8080/webhook-test/e77b5a73-f0ef-42ff-9519-8e5bbb7d7af4"
         
         files = {"file": (invoice_file.name, invoice_file.getvalue(), invoice_file.type)}
