@@ -274,7 +274,7 @@ if 'processed_data' in st.session_state:
         
         # Recalculate the grand total based on the final list of items
         final_data['total_amount'] = sum(
-            item.get('subtotal', 0.0) or 0.0 for item in cleaned_final_items
+            item.get('subtotal', 0) or 0 for item in cleaned_final_items
         )
         
         st.session_state.final_data = final_data
