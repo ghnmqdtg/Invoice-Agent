@@ -8,7 +8,7 @@ An automated invoice processing system using n8n and a Python backend to extract
 
 - **Automated Invoice Parsing**: Uses Google's Gemini 2.5 Flash model to extract structured data from uploaded invoice files (e.g., PDF, PNG, JPG).
 - **Product Fuzzy Matching**: Matches extracted line items against a product database using a combination of alias map and fuzzy matching algorithms.
-- **Self-Learning Alias System**: Learns from manually corrected product matches to improve accuracy over time. A human-in-the-loop workflow.
+- **Dynamic Alias Mapping**: Creates a mapping from invoice item names to product database entries based on user corrections, improving future accuracy.
 - **Containerized**: The entire application is containerized using Docker and managed with Docker Compose for easy setup and deployment.
 - **Web Interface**: Includes a Streamlit application for interacting with the uploading and product matching functionality.
 
@@ -86,7 +86,7 @@ This workflow is triggered when an invoice is uploaded.
 - **`Listen to File Upload`**: A webhook node receives the invoice file from a client like the Streamlit app.
 - **File Preparation**: The file is converted to a Base64 string and its MIME type is identified.
 - **`Extract Invoice Data`**: The prepared file data is sent to the Google Gemini API to extract structured information. The prompt is provided in [Appendix](Appendix.md).
-- **Data Processing**: The Gemini output is formatted into a JSON object, which is then sent to the Python service for product matching.
+- **`Product Matching`**: The Gemini output is formatted into a JSON object, which is then sent to the Python service for product matching. The matching method is also provided in [Appendix](Appendix.md).
 - **`Respond to Webhook`**: The final JSON, enriched with product matching results, is returned to the client.
 
 **2. Uploading Reviewed JSON**
@@ -171,3 +171,20 @@ Sometimes the AI fails to match the items correctly. We need to manually correct
     ├── product_db.csv          # Your master product list
     └── product_alias.csv       # Auto-generated alias list for learning
 ```
+
+## TODO List / Potential Features
+
+- [ ] Fix: Improve the error handling
+- [ ] Fix: Provide suggestion along with `unit` for the user to choose from
+  > In my testing dataset, there are some items that have the same name but different unit. For example, there are two different items named `富士蘋果` with `unit` of `斤` and `KG`. We should provide a suggestion along with the `unit` to help the user to choose the correct one. Or, maybe we can involve the `unit` in the fuzzy matching to solve this problem.
+- [ ] Feat: Quantify the accuracy of the matching and find out the best matching method
+  > This project is just a prototype. Some of the choices are not deliberate enough. The matching method is one of them. The current method is `token_set_ratio`. We can try other methods in the `thefuzz` library.
+- [ ] Feat: Provide matching suggestion for the user to choose from
+  > We do have this feature on backend, but it's not implemented in Streamlit App.
+- [ ] Test: Add unit tests
+- [ ] Test: Handle multiple requests at once
+  > Currently, I've only tested the service with one request at a time. We should test it with multiple requests at once.
+- [ ] Feat: Batch processing multiple invoices at once (merge/separate)
+- [ ] Feat: Let the Gemini do self-checking on product names
+- [ ] Feat: Let the Gemini provide bbox (bounding box) for the invoice items
+- [ ] Feat: Add interactive UI with the bbox
