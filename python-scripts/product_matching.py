@@ -61,7 +61,22 @@ def process_invoice():
         data = request.get_json()
         invoice_data = data.get('invoice_data', {})
         match_method = data.get('match_method', 'basic') # Default to basic
-        
+
+        # Check if the "items" is empty
+        if not invoice_data.get('items'):
+            # Directly return the invoice data without processing
+            return jsonify({
+                "success": True,
+                "timestamp": datetime.now().isoformat(),
+                "processing_time": 0,
+                "processing_stats": {
+                    "total_items": 0,
+                    "matched_items": 0,
+                    "unmatched_items": 0
+                },
+                "processed_data": invoice_data
+            }), 200
+
         # Create a product_id -> product names map for quick lookups
         # Output: {product_id: product_name}
         product_id_map = {p['product_id']: p for p in product_db}

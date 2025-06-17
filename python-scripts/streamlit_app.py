@@ -83,14 +83,11 @@ if invoice_file:
             try:
                 response = requests.post(n8n_webhook_url, files=files, timeout=300)
                 response.raise_for_status()
-                
+                # Get the response as a JSON object
                 processed_json = response.json()
-                
                 # The python service nests the data in a 'processed_data' key.
                 # We extract it here. If not found, we assume the whole response is the data.
                 st.session_state.processed_data = processed_json.get('processed_data', processed_json)
-                
-                st.success("Invoice processed! Please review the matches below.")
             except requests.exceptions.RequestException as e:
                 st.error(f"Failed to process invoice: {e}")
                 # Try to show more helpful error from response
@@ -100,6 +97,13 @@ if invoice_file:
                     pass # response object may not exist
 
 if 'processed_data' in st.session_state:
+    # Check is the items is empty
+    if not st.session_state.processed_data.get('items'):
+        st.error("No items found in the invoice. Please try again.")
+        st.stop()
+    else:
+        st.success("Invoice processed! Please review the matches below.")
+
     st.header("Invoice Summary")
     st.write("You can edit the invoice summary details here if anything is missing or incorrect.")
     invoice_data = st.session_state.processed_data
