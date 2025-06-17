@@ -141,8 +141,8 @@ In this payload, I set `thinkingBudget` to 0 to disable the Gemini's thinking.
         "unit": "斤",
         "unit_price": 189,
         "subtotal": 2835
-      },
-      ...
+      }
+      // ... more items
     ]
   }
 }
@@ -150,15 +150,13 @@ In this payload, I set `thinkingBudget` to 0 to disable the Gemini's thinking.
 
 ## 2. Python Service: Product Matching
 
-### APIs
+### 1. POST /process-invoice
 
-- `GET /health`: A health check endpoint. (Docker Compose will run it automatically.)
-- `POST /process-invoice`: Receives invoice JSON data from n8n, performs product matching, and returns the enhanced data.
-- `POST /update-alias`: Receives a corrected invoice JSON data and updates the product alias database.
+Receives invoice JSON data from n8n, performs product matching, and returns the enhanced data.
 
-### Request (to `process-invoice` API)
+#### Request
 
-You can use "basic" or "fuzzy" matching method. The default is "fuzzy" (token_set_ratio).
+You can use `basic` or `fuzzy` matching method. The default is `fuzzy` (token_set_ratio).
 
 ```json
 {
@@ -167,72 +165,136 @@ You can use "basic" or "fuzzy" matching method. The default is "fuzzy" (token_se
 }
 ```
 
-### Response (from `process-invoice` API)
+#### Response
 
-- The service returns the processed data with matching statistics.
-
-  ```json
-  {
-    "processed_data": {
-        "currency": "TWD",
-        "due_date": "",
-        "invoice_date": "2025-03-29",
-        "invoice_number": "4500567903",
-        "payment_method": "Cash",
-        "shipping_address": "",
-        "tax": 0,
-        "total_amount": 198717,
-        "vendor_name": "家樂福-台北復興",
-        "items": [
-        {
-            "match_score": 100,
-            "matched_name": "廣東A/生菜葉",
-            "original_name": "廣東A/生菜葉",
-            "product_id": "B059010",
-            "quantity": 15,
-            "subtotal": 2835,
-            "unit": "KG",
-            "unit_price": 189
-        },
-        ...
-        ]
-    },
-    "processing_stats": {
-        "average_match_score": 99.86153846153846,
-        "matched_items": 130,
-        "max_match_score": 100,
-        "min_match_score": 86,
-        "total_items": 130,
-        "unmatched_items": 0
-    },
-    // This is the matching time, Gemini's processing time is not included.
-    "processing_time": 0.26017093658447266,
-    "success": true,
-    "timestamp": "2025-06-17T07:23:36.604165"
-  }
-  ```
-
-- **Possible matches**
-
-  For unmatched items, it may include possible matches, which can be used as a suggestion for the user to manually correct. (However, the current frontend doesn't support this yet because Streamlit dataframe doesn't support dynamic columns.)
-
-  ```json
-  {
-    "match_score": 67,
-    "matched_name": null,
-    "original_name": "豬皮",
-    "possible_matches": [
+```json
+{
+  "processed_data": {
+    "currency": "TWD",
+    "due_date": "",
+    "invoice_date": "2025-03-29",
+    "invoice_number": "4500567903",
+    "payment_method": "Cash",
+    "shipping_address": "",
+    "tax": 0,
+    "total_amount": 198717,
+    "vendor_name": "家樂福-台北復興",
+    "items": [
       {
-        "match_score": 67,
-        "matched_name": "肉皮\\豬皮",
-        "product_id": "J021010",
-        "unit": "斤"
+        "match_score": 100,
+        "matched_name": "廣東A/生菜葉",
+        "original_name": "廣東A/生菜葉",
+        "product_id": "B059010",
+        "quantity": 15,
+        "subtotal": 2835,
+        "unit": "KG",
+        "unit_price": 189
       }
-    ],
-    "product_id": null,
-    "quantity": 8,
-    "subtotal": 0,
-    "unit": "斤",
-    "unit_price": 0
-  }
-  ```
+      // ... more items
+    ]
+  },
+  "processing_stats": {
+    "average_match_score": 99.86153846153846,
+    "matched_items": 130,
+    "max_match_score": 100,
+    "min_match_score": 86,
+    "total_items": 130,
+    "unmatched_items": 0
+  },
+  // This is the matching time, Gemini's processing time is not included.
+  "processing_time": 0.26017093658447266,
+  "success": true,
+  "timestamp": "2025-06-17T07:23:36.604165"
+}
+```
+
+#### How it works?
+
+- **Basic Matching**
+
+  This method relies on exact string matching. The system first creates a lookup map from the product database. For each product, it generates several variants of its name:
+
+  1. The name is normalized by lowercasing and removing special characters.
+  2. If the name contains separators (e.g., `/` or `\`), it's split into individual parts.
+  3. A concatenated version without separators is also created.
+
+  All these variants are mapped to the original product. When an invoice item is processed, its name is normalized and looked up directly in this map. A match only occurs if the item's name is identical to one of the pre-generated variants. This method is fast, but it's not accurate enough.
+
+- **Fuzzy Matching**
+
+  This method uses fuzzy string matching to find the best fit from the product database (we use `thefuzz` library). It works as follows:
+
+  1. Of course, both the invoice item name and all product names from the database are normalized.
+  2. The algorithm calculates a similarity score (from 0 to 100) between the item name and every product name using the `fuzz.token_set_ratio` algorithm. This algorithm is effective at handling cases where words are out of order or when one name is a subset of the other.
+  3. A match is considered successful if the highest score is above a predefined confidence threshold (default: 85).
+  4. If the best match score is less than the threshold, the system will provide a list of possible matches.
+  5. If the best match score is greater than the threshold, the system will update the item with the `product_id`, `matched_name`, and `match_score`.
+
+  - **Possible matches**
+    When fuzzy matching is used and no single product scores above the high-confidence threshold (e.g., 85), the system can still provide suggestions.
+
+    ```json
+    {
+      "match_score": 67,
+      "matched_name": null,
+      "original_name": "豬皮",
+      "possible_matches": [
+        {
+          "match_score": 67,
+          "matched_name": "肉皮\\豬皮",
+          "product_id": "J021010",
+          "unit": "斤"
+        }
+      ],
+      "product_id": null,
+      "quantity": 8,
+      "subtotal": 0,
+      "unit": "斤",
+      "unit_price": 0
+    }
+    ```
+
+    - We create a list of all products that scored above a lower suggestion threshold (default: 60).
+    - This list, `possible_matches`, is returned in the API response, allowing the UI to present a list of suggestions, from which the user can select the correct one.
+      > Note: The current frontend doesn't support this suggestion feature yet because Streamlit dataframe doesn't support dynamic columns.
+
+### 2. POST /update-alias
+
+After the user corrected the invoice JSON data and send it to the n8n webhook, the service will save it to Google Drive and also update the product alias database.
+
+#### Request
+
+The request is sent by n8n webhook.
+
+```json
+{{ $('Listen to the completed JSON Upload').item.json.body }}
+```
+
+#### Response
+
+```json
+{
+  "message": "Alias database updated. 70 aliases processed.",
+  "success": true
+}
+```
+
+#### How it works?
+
+- **Update the alias database**
+
+  This API updates the product alias database (`product_alias.csv`) by saving the manually corrected invoice items, which improves the accuracy of future product matching.
+
+  The process is as follows:
+
+  1.  Assign the `original_name` to the `product_id` of `matched_name` as an alias.
+
+      > For example, "豬皮" is the `original_name` and the corrected product name in DB is "肉皮\\豬皮" (ID:J021010), we pair "豬皮" with ID "J021010" as an alias.
+
+      > Note: The `original_name` is the name detected by Gemini, and the `product_id` of `matched_name` is the correct ID assigned during manual review.
+
+  2.  Save the alias to `product_alias.csv` in backend.
+
+- **Reuse the alias database**
+
+  When next time `POST /process-invoice` receives the invoice data, it will check the alias database to match the product name before basic matching or fuzzy matching.
