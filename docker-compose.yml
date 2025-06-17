@@ -13,7 +13,6 @@ services:
       - GENERIC_TIMEZONE=Asia/Taipei
     volumes:
       - n8n_data:/home/node/.n8n
-      - ./shared:/shared
     networks:
       - invoice-network
 
@@ -26,7 +25,7 @@ services:
       - "5001:5000"
     volumes:
       - ./python-scripts:/app
-      - ./shared:/shared
+      - ./python-scripts/shared:/shared
     environment:
       - PYTHONPATH=/app
       - FLASK_ENV=development

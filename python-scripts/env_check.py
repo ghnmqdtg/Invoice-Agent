@@ -38,7 +38,7 @@ def Check_shared_volume():
     """Check that shared volume is accessible"""
     print("=== Shared Volume Check ===")
     try:
-        test_file = "/shared/test_from_python.txt"
+        test_file = "shared/test_from_python.txt"
         with open(test_file, "w") as f:
             f.write(f"Test from Python container at {datetime.now()}")
         print(f"✅ Successfully wrote to shared volume: {test_file}")
