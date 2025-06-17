@@ -1,0 +1,421 @@
+{
+  "name": "Invoice-Agent",
+  "nodes": [
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "c3249467-7845-48cc-8666-e120e71cce29",
+              "name": "mime_type",
+              "value": "={{ $('Listen to File Upload').item.binary.file.mimeType }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {
+          "dotNotation": false
+        }
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        360,
+        320
+      ],
+      "id": "a16af16b-c5e4-4722-a976-952ee1a95b80",
+      "name": "Get file mime type"
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineAll",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.1,
+      "position": [
+        580,
+        220
+      ],
+      "id": "b4104845-2ea2-4305-aa41-fcbf1fa68464",
+      "name": "Merge"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Convert the output of Gemini to desired JSON format\nconst rawText = $input.first().json.candidates[0].content.parts[0].text;\nconst jsonString = rawText.replace(/^```json/, '').replace(/```$/, '').replaceAll('\\\\', '').trim();\nconst jsonObject = JSON.parse(jsonString);\n\n// Define the translation map\n// Maps the desired English output to an array of possible Chinese inputs.\nconst paymentMethodMap = {\n  \"Cash\": [\"現金\", \"現金付款\", \"Cash\"],\n  \"Bank Transfer\": [\"銀行轉帳\", \"轉帳\", \"匯款\", \"Bank Transfer\"],\n  \"Credit Card\": [\"信用卡\", \"刷卡\", \"Credit Card\"]\n  // \"Other\" is the default and doesn't need to be in the map.\n};\n\n// Get the original payment method from the parsed JSON\nconst originalPaymentMethod = jsonObject.payment_method;\nlet translatedPaymentMethod = \"Other\"; // Default value\n\n// 3. Find the correct English translation\nif (originalPaymentMethod) {\n  // Loop through our map (e.g., key = \"Cash\", value = [\"現金\", \"現金付款\"])\n  for (const [englishKey, chineseValues] of Object.entries(paymentMethodMap)) {\n    // Check if the original value is included in the array of Chinese terms\n    if (chineseValues.includes(originalPaymentMethod)) {\n      translatedPaymentMethod = englishKey;\n      break; // Exit the loop once a match is found\n    }\n  }\n}\n\n// 4. Update the payment_method in your JSON object\njsonObject.payment_method = translatedPaymentMethod;\n\n\n// Return the final, modified object\nreturn { invoice_data: jsonObject };"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1020,
+        220
+      ],
+      "id": "bdfb3795-ae0e-42ad-bf5e-0121aefc00b0",
+      "name": "Format Gemini output to JSON"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20\n:generateContent",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "key",
+              "value": "YOUR_GEMINI_API_KEY"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"system_instruction\": {\n    \"parts\": [\n      {\n        \"text\": \"You are an intelligent invoice parser. Analyze the provided invoice files.\\n\\nYour job is to:\\n\\n1.  Extract key information from the invoice, such as:\\n    * invoice_number\\n    * order_date\\n    * vendor_name\\n    * shipping_address\\n    * total_amount\\n    * currency (e.g., USD, TWD, etc.)\\n    * payment_method ([\\\"Cash\\\", \\\"Bank Transfer\\\", \\\"Credit Card\\\", \\\"Other\\\"])\\n    * list of items (use the key in English)\\n        * product_id (品號)\\n        * product_name (品名)\\n        * quantity (數量)\\n        * unit (單位)\\n        * unit_price (單價)\\n        * subtotal (小計)\\n    * tax (if available)\\n    \\n2. Some of the invoices might be handwritten. Here are some hints for you:\\n\\t1. If the text is in Chinese, please respond in Taiwaness style Traditional Chinese.\\n\\t2. If you find crossed-out items, please ignore them.\\n\\t3. Items are typically written in a format like \\\"{product name} {quantity} {unit}\\\", and there is no price.\\n\\t4. Some of the invoices are long, and items would be in columns.\\n\\t5. Auto-correct the crabbed writing text. For example, units like \\\"兩\\\"(tael) might look like \\\"雨\\\" (rain); we correct it to \\\"兩\\\".\\n\\t6. Some people like to write product names with spaces, for example, a product like \\\"蒜泥\\\" would be written like \\\"蒜    泥\\\". Please do not mistake it as two products, \\\"蒜\\\" and \\\"泥\\\".\\n\\t7. Auto-correct product names. Products are foods and groceries. Please try to provide the correct names.\\n\\t8. Items may look similar, but typically are not repeated.\\n\\n3.  Return the result in this exact JSON format (We use int for prices):\\n\\n```json\\n{\\n  \\\"invoice_number\\\": \\\"\\\",\\n  \\\"invoice_date\\\": \\\"YYYY-MM-DD\\\",\\n  \\\"due_date\\\": \\\"YYYY-MM-DD\\\",\\n  \\\"vendor_name\\\": \\\"\\\",\\n  \\\"shipping_address\\\": \\\"\\\",\\n  \\\"payment_method\\\": \\\"\\\",\\n  \\\"total_amount\\\": 0,\\n  \\\"currency\\\": \\\"\\\",\\n  \\\"tax\\\": 0,\\n  \\\"items\\\": [\\n    {\\n      \\\"product_id\\\": \\\"\\\",\\n      \\\"product_name\\\": \\\"\\\",\\n      \\\"quantity\\\": 0,\\n      \\\"unit\\\": \\\"\\\",\\n      \\\"unit_price\\\": 0,\\n      \\\"subtotal\\\": 0\\n    }\\n  ]\\n}\\n```\\n\\n4. If the file isn't a invoice, please return the above JSON format empty.\"\n      }\n    ]\n  },\n  \"contents\": [\n    {\n      \"parts\": [\n        {\n          \"text\": \"Please extract the invoice data from the given file and only return the required JSON.\"\n        },\n        {\n          \"inline_data\": {\n            \"mime_type\": \"{{ $json.mime_type }}\",\n            \"data\": \"{{ $json.data }}\"\n          }\n        }\n      ]\n    }\n  ],\n  \"generationConfig\": {\n    \"thinkingConfig\": {\n      \"thinkingBudget\": 0\n    }\n  }\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        800,
+        220
+      ],
+      "id": "fc54c641-8740-4b4b-9e62-d66afdf8a278",
+      "name": "Extract Invoice Data"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://python-service:5000/process-invoice",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"invoice_data\": {{ JSON.stringify($json.invoice_data) }}, \"match_method\": \"fuzzy\"}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1240,
+        220
+      ],
+      "id": "1f27050f-7c18-4f87-840b-095329d7c265",
+      "name": "HTTP Request",
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        1460,
+        220
+      ],
+      "id": "4a6e080a-2a3e-4577-af11-41547a8681ce",
+      "name": "Respond to Webhook"
+    },
+    {
+      "parameters": {
+        "operation": "binaryToPropery",
+        "binaryPropertyName": "file",
+        "destinationKey": "=data",
+        "options": {
+          "keepSource": "json"
+        }
+      },
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1,
+      "position": [
+        360,
+        120
+      ],
+      "id": "2050a31d-b8eb-4176-8fcd-9010c2a695f4",
+      "name": "Get Base64 String",
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        800,
+        780
+      ],
+      "id": "3aa5ae05-a134-4cb2-a390-149f8beef99f",
+      "name": "Respond to Webhook1"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://python-service:5000/update-alias",
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ $('Listen to the completed JSON Upload').item.json.body }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        800,
+        580
+      ],
+      "id": "a17fe112-f6aa-463d-9759-1b89d8857cea",
+      "name": "Update Alias"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "6311e87c-7eaa-4fe9-b283-264b03b45f6d",
+        "responseMode": "responseNode",
+        "options": {
+          "rawBody": true
+        }
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        140,
+        220
+      ],
+      "id": "a5a03af4-335e-4886-be94-c0fb5596ce3a",
+      "name": "Listen to File Upload",
+      "webhookId": "6311e87c-7eaa-4fe9-b283-264b03b45f6d",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "operation": "toJson",
+        "mode": "each",
+        "binaryPropertyName": "=data",
+        "options": {
+          "fileName": "={{ $json.body.file_name }}"
+        }
+      },
+      "type": "n8n-nodes-base.convertToFile",
+      "typeVersion": 1.1,
+      "position": [
+        360,
+        680
+      ],
+      "id": "5436616b-2117-4cf4-8cc5-768bb5246f50",
+      "name": "Convert to JSON file"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "6891794f-7b21-4460-9e4b-52cdcb643f6c",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        140,
+        680
+      ],
+      "id": "2663b7a9-1f38-43ea-96ea-cfd965978dfd",
+      "name": "Listen to the completed JSON Upload",
+      "webhookId": "6891794f-7b21-4460-9e4b-52cdcb643f6c"
+    },
+    {
+      "parameters": {
+        "inputDataFieldName": "=data",
+        "name": "={{ $('Convert to JSON file').item.binary.data.fileName }}",
+        "driveId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "My Drive"
+        },
+        "folderId": {
+          "__rl": true,
+          "value": "",
+          "mode": "list"
+        },
+        "options": {
+          "simplifyOutput": true
+        }
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        580,
+        680
+      ],
+      "id": "185fac68-643d-4224-87bd-37d340bc1426",
+      "name": "Save result to Google Drive",
+      "executeOnce": true,
+      "credentials": {}
+    },
+    {
+      "parameters": {
+        "content": "# Uploading Reviewd JSON",
+        "height": 460,
+        "width": 1080,
+        "color": 4
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        20,
+        520
+      ],
+      "typeVersion": 1,
+      "id": "1b9cbb59-83b7-48c6-9b4f-59101458fa6b",
+      "name": "Sticky Note"
+    },
+    {
+      "parameters": {
+        "content": "# Uploading Invoice & Return the Detection Result in JSON",
+        "height": 460,
+        "width": 1660
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        20,
+        40
+      ],
+      "typeVersion": 1,
+      "id": "b573800a-d2c2-44a9-8139-d277349817b5",
+      "name": "Sticky Note1"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Get file mime type": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Extract Invoice Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Gemini output to JSON": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Invoice Data": {
+      "main": [
+        [
+          {
+            "node": "Format Gemini output to JSON",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Base64 String": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Listen to File Upload": {
+      "main": [
+        [
+          {
+            "node": "Get file mime type",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Get Base64 String",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Convert to JSON file": {
+      "main": [
+        [
+          {
+            "node": "Save result to Google Drive",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Listen to the completed JSON Upload": {
+      "main": [
+        [
+          {
+            "node": "Convert to JSON file",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save result to Google Drive": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Update Alias",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "6c4b3647-f57d-47ba-996d-ddbf84c79478",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "04bde9a075f91b5f73a1974da63a5a2bf14f37f4dc0502c456b5d2c1890afb93"
+  },
+  "id": "phLpTXNEx8OEBVVX",
+  "tags": []
+}
