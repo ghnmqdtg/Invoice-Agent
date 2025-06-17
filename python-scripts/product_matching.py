@@ -125,7 +125,7 @@ def process_invoice():
             "timestamp": datetime.now().isoformat()
         }), 500
 
-def get_processing_stats(invoice_data):
+def get_processing_stats(invoice_data: dict) -> dict:
     """Get processing statistics"""
     items = invoice_data.get('items', [])
     matched_items = len([item for item in items if item.get('product_id')])
@@ -210,8 +210,8 @@ if __name__ == '__main__':
     shared_dir = os.path.join(os.path.dirname(__file__), 'shared')
     os.makedirs(shared_dir, exist_ok=True)
     
-    print("🚀 Starting Simple Invoice Agent Python Service...")
-    print("📊 Available endpoints:")
+    print("Starting Simple Invoice Agent Python Service...")
+    print("Available endpoints:")
     print("  GET  /health - Health check")
     print("  POST /process-invoice - Basic invoice processing with exact matching")
     
