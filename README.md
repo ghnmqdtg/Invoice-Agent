@@ -12,14 +12,6 @@ An automated invoice processing system using n8n and a Python backend to extract
 - **Containerized**: The entire application is containerized using Docker and managed with Docker Compose for easy setup and deployment.
 - **Web Interface**: Includes a Streamlit application for interacting with the uploading and product matching functionality.
 
-## Architecture
-
-The system consists of two main services orchestrated by Docker Compose:
-
-1.  **n8n Service**: A workflow automation tool that orchestrates the entire invoice processing pipeline, from receiving the file to calling the AI model and our Python service.
-2.  **Python Service**: A Flask-based web service that handles the logic for product matching and maintains a database of product aliases.
-    > Since the n8n Code node doesn't support the installation of Python or JavaScript libraries, we need to use this extra service to handle the complex logic.
-
 ## Getting Started
 
 ### Prerequisites
@@ -30,52 +22,56 @@ The system consists of two main services orchestrated by Docker Compose:
 
 ### Setup
 
-1.**Clone the repository:**
-`bash
-    git clone https://github.com/ghnmqdtg/Invoice-Agent.git
-    cd Invoice-Agent
-    `
+1. **Clone the repository:**
 
-2.  **Run the docker:**
+   ```bash
+   git clone https://github.com/ghnmqdtg/Invoice-Agent.git
+   cd Invoice-Agent
+   ```
 
-    ```bash
-    docker-compose up -d
-    ```
+2. **Run the docker:**
 
-3.  **Configure n8n:**
+   ```bash
+   docker-compose up -d
+   ```
 
-    - Go to `http://localhost:8080` and login with your n8n account.
-    - Import `workflow/Invoice_Agent.json` into your n8n workflow.
-    - Update the Gemini API Key in the `Extract Invoice Data` node within the n8n workflow.
-    - Create a folder in Google Drive and add it to `Save result to Google Drive` node.
+3. **Configure n8n:**
 
-4.  **Prepare product database:**
+   - Go to `http://localhost:8080` and login with your n8n account.
+   - Import `workflow/Invoice_Agent.json` into your n8n workflow.
+   - Update the Gemini API Key in the `Extract Invoice Data` node within the n8n workflow.
+   - Create a folder in Google Drive and add it to `Save result to Google Drive` node.
 
-    - Put product database in `DB` folder and rename it to `product_dataset.xlsx`.
-    - Convert the xlsx to csv.
-      ```bash
-      python utils/excel_converter.py
-      ```
+4. **Prepare product database:**
 
-5.  **Set the config.json:**
+   - Put product database in `DB` folder and rename it to `product_dataset.xlsx`.
+   - Convert the xlsx to csv.
+     ```bash
+     python utils/excel_converter.py
+     ```
 
-    - Copy the example config file:
-      ```bash
-      cp python-scripts/config.json.example python-scripts/config.json
-      ```
-    - Update the `N8N_PROCESS_INVOICE_WEBHOOK` and `N8N_GDRIVE_UPLOAD_WEBHOOK` in `python-scripts/config.json` with the webhook URLs of the n8n workflow.
+5. **Set the config.json:**
 
-6.  **Initialize Streamlit App:**
+   - Copy the example config file:
+     ```bash
+     cp python-scripts/config.json.example python-scripts/config.json
+     ```
+   - Update the `N8N_PROCESS_INVOICE_WEBHOOK` and `N8N_GDRIVE_UPLOAD_WEBHOOK` in `python-scripts/config.json` with the webhook URLs of the n8n workflow.
 
-    Run the following command to initialize the Streamlit app.
+6. **Initialize Streamlit App:**
 
-    ```bash
-    streamlit run python-scripts/streamlit_app.py
-    ```
+   Run the following command to initialize the Streamlit app.
+
+   ```bash
+   streamlit run python-scripts/streamlit_app.py
+   ```
 
 ## Workflow
 
-The core logic is orchestrated in n8n and relies on the Python backend for specialized tasks.
+The invoice processing workflow is orchestrated by two main services running in Docker containers:
+
+- **n8n Service**: This workflow automation tool orchestrates the entire pipeline, from receiving an invoice file to calling the AI model and our Python service.
+- **Python Service**: A Flask-based web service that handles the logic for product matching and maintains a database of product aliases. Since n8n's code nodes have limitations on library imports, this service handles the more complex logic.
 
 ### n8n Workflow
 
