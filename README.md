@@ -2,6 +2,8 @@
 
 An automated invoice processing system using n8n and a Python backend to extract data from invoices, match products against a database, and learn from manual corrections.
 
+<img src="assets/Screenshot_UI.png" alt="Streamlit App" width="800">
+
 ## Features
 
 - **Automated Invoice Parsing**: Uses Google's Gemini 2.5 Flash model to extract structured data from uploaded invoice files (e.g., PDF, PNG, JPG).
@@ -16,7 +18,7 @@ The system consists of two main services orchestrated by Docker Compose:
 
 1.  **n8n Service**: A workflow automation tool that orchestrates the entire invoice processing pipeline, from receiving the file to calling the AI model and our Python service.
 2.  **Python Service**: A Flask-based web service that handles the logic for product matching and maintains a database of product aliases.
-    > Why? Since the n8n Code node doesn't support the installation of Python or JavaScript libraries, we need to use an extra service to handle the complex logic.
+    > Since the n8n Code node doesn't support the installation of Python or JavaScript libraries, we need to use this extra service to handle the complex logic.
 
 ## Getting Started
 
@@ -45,6 +47,7 @@ The system consists of two main services orchestrated by Docker Compose:
     - Go to `http://localhost:8080` and login with your n8n account.
     - Import `workflow/Invoice_Agent.json` into your n8n workflow.
     - Update the Gemini API Key in the `Extract Invoice Data` node within the n8n workflow.
+    - Create a folder in Google Drive and add it to `Save result to Google Drive` node.
 
 4.  **Prepare product database:**
 
@@ -54,7 +57,15 @@ The system consists of two main services orchestrated by Docker Compose:
       python utils/excel_converter.py
       ```
 
-5.  **Initialize Streamlit App:**
+5.  **Set the config.json:**
+
+    - Copy the example config file:
+      ```bash
+      cp python-scripts/config.json.example python-scripts/config.json
+      ```
+    - Update the `N8N_PROCESS_INVOICE_WEBHOOK` and `N8N_GDRIVE_UPLOAD_WEBHOOK` in `python-scripts/config.json` with the webhook URLs of the n8n workflow.
+
+6.  **Initialize Streamlit App:**
 
     Run the following command to initialize the Streamlit app.
 
@@ -66,49 +77,70 @@ The system consists of two main services orchestrated by Docker Compose:
 
 The core logic is orchestrated in n8n and relies on the Python backend for specialized tasks.
 
-### Main Invoice Processing Workflow
+### n8n Workflow
 
-This workflow is triggered when a user uploads an invoice file.
+<img src="assets/Screenshot_workflow.png" alt="Invoice Processing Workflow" width="800">
 
-<!-- TODO: Redefine colors and node styles -->
+The n8n workflow automates the entire process, from receiving an invoice to learning from user corrections. It's divided into two main parts as shown in the diagram:
+
+**1. Uploading Invoice & Return the Detection Result in JSON**
+
+This workflow is triggered when an invoice is uploaded.
+
+- **`Listen to File Upload`**: A webhook node receives the invoice file from a client like the Streamlit app.
+- **File Preparation**: The file is converted to a Base64 string and its MIME type is identified.
+- **`Extract Invoice Data`**: The prepared file data is sent to the Google Gemini API to extract structured information. The prompt is provided in [Appendix](Appendix.md).
+- **Data Processing**: The Gemini output is formatted into a JSON object, which is then sent to the Python service for product matching.
+- **`Respond to Webhook`**: The final JSON, enriched with product matching results, is returned to the client.
+
+**2. Uploading Reviewed JSON**
+
+This workflow handles human-in-the-loop corrections to improve the system over time.
+
+- **`Listen to the completed JSON Upload`**: A webhook receives the corrected JSON from the client.
+- **Data Persistence**: The corrected JSON is saved to Google Drive for record-keeping.
+- **Learning from Corrections**: The data is also sent to the `/update-alias` endpoint of the Python service. The service updates its product alias map, which improves future matching accuracy.
+- **`Respond to Webhook`**: A confirmation is sent back to the client.
+
+### Sequence Diagram
 
 ```mermaid
-graph TD
-    A[File Upload Webhook] --> B["Extract Invoice Data (Gemini 2.5 Flash API)"];
-    B --> C["Process Invoice (Python Service)"];
-    C --> D[Respond to Webhook with Processed Data];
+sequenceDiagram
+    participant User
+    participant Streamlit App
+    participant n8n as n8n Workflow
+    participant GeminiAPI as Google Gemini API
+    participant PythonService as Python Service
+    participant GDrive as Google Drive
 
-    E[Uploading Reviewed JSON] --> F[Save to Google Drive];
-    F --> G@{ shape: cylinder, label: "Update Alias on Python Service" };
-    F --> H[Respond to Webhook with Processed Data];
+    Note over User, PythonService: Initial Invoice Processing
+    User->>Streamlit App: Uploads invoice file
+    Streamlit App->>n8n: POST to Invoice Webhook with file
+    activate n8n
+    n8n->>GeminiAPI: Extract data from invoice
+    activate GeminiAPI
+    GeminiAPI-->>n8n: Returns structured data
+    deactivate GeminiAPI
+    n8n->>PythonService: POST /process-invoice with extracted data
+    activate PythonService
+    PythonService-->>n8n: Returns data with matched products
+    deactivate PythonService
+    n8n-->>Streamlit App: Responds with processed data
+    deactivate n8n
+    Streamlit App->>User: Displays processed data for review
 
-    subgraph "n8n Workflow"
-      direction LR
-      subgraph "Invoice Detection"
-        direction LR
-        A
-        B
-        C
-        D
-      end
-
-      subgraph "Uploading Reviewed JSON"
-        direction LR
-        E
-        F
-        G
-        H
-        end
-    end
-
-    style A fill:#8E75FF,stroke:#333,stroke-width:2px,color:#fff
-    style B fill:#FFC300,stroke:#333,stroke-width:2px,color:#000
-    style C fill:#2ECC71,stroke:#333,stroke-width:2px,color:#fff
-    style D fill:#f9f,stroke:#333,stroke-width:2px,color:#000
-    style E fill:#2ECC71,stroke:#333,stroke-width:2px,color:#fff
-    style F fill:#f9f,stroke:#333,stroke-width:2px,color:#000
-    style G fill:#f9f,stroke:#333,stroke-width:2px,color:#000
-    style H fill:#f9f,stroke:#333,stroke-width:2px,color:#000
+    Note over User, GDrive: Human-in-the-Loop Correction
+    User->>Streamlit App: Corrects matches and submits
+    Streamlit App->>n8n: POST to Reviewed JSON Webhook with corrections
+    activate n8n
+    n8n->>GDrive: Save corrected JSON
+    n8n->>PythonService: POST /update-alias with corrections
+    activate PythonService
+    PythonService-->>n8n: Confirms alias update
+    deactivate PythonService
+    n8n-->>Streamlit App: Responds with success
+    deactivate n8n
+    Streamlit App->>User: Displays success message
 ```
 
 ### Human-in-the-Loop (HITL) & Alias Mapping Workflow
@@ -119,3 +151,27 @@ Sometimes the AI fails to match the items correctly. We need to manually correct
 2.  They correct the `matched_name` for these items.
 3.  The corrected JSON is submitted to a dedicated `Uploading Reviewed JSON` webhook in n8n. It triggers the `Update Alias` node, which calls the `/update-alias` endpoint on the Python service.
 4.  Python service then updates the `product_alias.csv` with the corrected `original_name` as `alias_name`. Also, pair the `product_id` with the `alias_name`. This helps the workflow to match them in the next run.
+
+## File Structure
+
+```
+.
+├── workflow/
+│   └── Invoice_Agent.json      # n8n workflow backup
+├── docker-compose.yml          # Docker Compose configuration
+├── DB/
+│   └── product_dataset.csv     # Product database
+├── utils/
+│   ├── excel_converter.py      # Excel to CSV converter
+│   └── prompt_converter.py     # Convert prompt to single line
+├── README.md                   # This file
+├── python-scripts/
+│   ├── product_matching.py     # Main Flask app for product matching
+│   ├── streamlit_app.py        # Streamlit UI for testing
+│   ├── matching_methods/       # Product matching algorithms
+│   ├── config.json.example     # Example config file
+│   └── requirements.txt        # Python dependencies
+└── shared/
+    ├── product_db.csv          # Your master product list
+    └── product_alias.csv       # Auto-generated alias list for learning
+```
