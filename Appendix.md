@@ -81,6 +81,8 @@ Please extract the invoice data from the given file and only return the required
 
 #### Payload
 
+If you want to update the prompt, you need to convert the prompt to a single line string and paste it into `system_instruction` or `user_prompt` field. You can use the `prompt_converter.html` in `utils/` to do this.
+
 In this payload, I set `thinkingBudget` to 0 to disable the Gemini's thinking.
 
 ```json
